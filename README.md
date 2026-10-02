@@ -2,6 +2,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.0+](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23108803.svg)](https://doi.org/10.5281/zenodo.23108803)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![WFD Compliant](https://img.shields.io/badge/WFD%20Directive-2000%2F60%2FEC-06B6D4.svg)](https://environment.ec.europa.eu/topics/water/water-framework-directive_en)
 [![Offline Privacy](https://img.shields.io/badge/Privacy-100%25%20Offline%20%2F%20Zero%20Cloud-success.svg)](#privacy--data-sovereignty)
@@ -126,7 +127,7 @@ If you use this software or empirical error damping findings in your research, p
   author={Manah, Zar},
   journal={bioRxiv / Zenodo Preprints},
   year={2026},
-  doi={10.5281/zenodo.10654872}
+  doi={10.5281/zenodo.23108803}
 }
 ```
 
