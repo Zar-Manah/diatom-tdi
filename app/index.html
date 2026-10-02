@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>zar manah diatom tdi</title>
+  <link rel="icon" type="image/svg+xml" href="/icon.svg">
+  <style>
+    :root {
+      --bg: #070B12;
+      --panel: rgba(15, 23, 42, 0.75);
+      --panel-border: rgba(51, 65, 85, 0.5);
+      --accent: #06B6D4;
+      --accent-glow: rgba(6, 182, 212, 0.25);
+      --text: #F1F5F9;
+      --text-muted: #94A3B8;
+      --text-dim: #64748B;
+      
+      --c-excellent: #10B981;
+      --c-good: #34D399;
+      --c-fair: #F59E0B;
+      --c-poor: #F97316;
+      --c-bad: #EF4444;
+
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Header */
+    header {
+      height: 56px;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--panel-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(11, 15, 25, 0.85);
+      backdrop-filter: blur(12px);
+      z-index: 10;
+      flex-shrink: 0;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand img {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+    }
+    .brand-title {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .brand-title span {
+      font-size: 11px;
+      font-family: var(--mono);
+      font-weight: 500;
+      color: var(--accent);
+      background: rgba(6, 182, 212, 0.1);
+      padding: 2px 7px;
+      border-radius: 4px;
+      border: 1px solid rgba(6, 182, 212, 0.25);
+    }
+    .brand-author {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-weight: 400;
+      margin-top: 1px;
+    }
+    .brand-author strong {
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .author-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-family: var(--mono);
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--panel-border);
+      padding: 5px 10px;
+      border-radius: 6px;
+      text-decoration: none;
+      transition: all 0.15s ease;
+    }
+    .author-badge:hover {
+      color: var(--accent);
+      border-color: rgba(6, 182, 212, 0.4);
+      background: rgba(6, 182, 212, 0.08);
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .status-dot {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: var(--mono);
+    }
+    .status-dot::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #10B981;
+      box-shadow: 0 0 8px #10B981;
+    }
+    .btn-quit {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #F87171;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .btn-quit:hover {
+      background: rgba(239, 68, 68, 0.25);
+      border-color: #EF4444;
+      color: #FFF;
+    }
+
+    /* Main Workspace */
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 16px;
+      padding: 16px;
+      overflow: hidden;
+      background: radial-gradient(circle at 10% 20%, rgba(6, 182, 212, 0.03), transparent 40%);
+    }
+
+    /* Left Pane: Image / Viewport */
+    .viewport-panel {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+    .viewport-toolbar {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--panel-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(15, 23, 42, 0.5);
+    }
+    .btn-action {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--panel-border);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+    .btn-action:hover {
+      background: rgba(6, 182, 212, 0.15);
+      border-color: var(--accent);
+      color: #FFF;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #030712;
+      border: none;
+      font-weight: 600;
+    }
+    .btn-primary:hover {
+      background: #22D3EE;
+    }
+    .toggle-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .toggle-group input {
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .canvas-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      background: #020617;
+      overflow: hidden;
+      cursor: grab;
+    }
+    #imageCanvas {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    /* Drop Zone Empty State */
+    .drop-zone {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      border: 2px dashed rgba(51, 65, 85, 0.6);
+      border-radius: 12px;
+      margin: 16px;
+      background: rgba(15, 23, 42, 0.4);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(6, 182, 212, 0.05);
+    }
+    .drop-zone svg {
+      width: 44px;
+      height: 44px;
+      color: var(--accent);
+      opacity: 0.8;
+    }
+    .drop-zone p {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .drop-zone span {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-family: var(--mono);
+    }
+
+    /* Right Pane: Results & Telemetry */
+    .results-panel {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Hero TDI Card */
+    .hero-card {
+      padding: 20px;
+      border-bottom: 1px solid var(--panel-border);
+      background: linear-gradient(135deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .tdi-display {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .tdi-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      font-family: var(--mono);
+    }
+    .tdi-value-row {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+    .tdi-number {
+      font-size: 42px;
+      font-weight: 800;
+      font-family: var(--mono);
+      line-height: 1;
+      color: #FFF;
+    }
+    .tdi-x10 {
+      font-size: 15px;
+      color: var(--text-muted);
+      font-family: var(--mono);
+    }
+    .quality-badge {
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 2px;
+    }
+    .quality-badge.excellent { background: rgba(16, 185, 129, 0.15); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .quality-badge.good { background: rgba(52, 211, 153, 0.15); color: #6EE7B7; border: 1px solid rgba(52, 211, 153, 0.3); }
+    .quality-badge.fair { background: rgba(245, 158, 11, 0.15); color: #FBBF24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .quality-badge.poor { background: rgba(249, 115, 22, 0.15); color: #FB923C; border: 1px solid rgba(249, 115, 22, 0.3); }
+    .quality-badge.bad { background: rgba(239, 68, 68, 0.15); color: #F87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .quality-sub {
+      font-size: 10px;
+      font-weight: 500;
+      opacity: 0.85;
+      text-transform: none;
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      padding: 14px 18px;
+      gap: 12px;
+      border-bottom: 1px solid var(--panel-border);
+      background: rgba(10, 15, 26, 0.4);
+    }
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .stat-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-dim);
+      font-family: var(--mono);
+    }
+    .stat-val {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text);
+      font-family: var(--mono);
+    }
+
+    /* Taxa Table */
+    .table-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 18px;
+    }
+    .table-header {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th {
+      text-align: left;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+    }
+    td {
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(30, 41, 59, 0.5);
+      color: var(--text);
+    }
+    .taxon-name {
+      font-style: italic;
+      font-weight: 500;
+    }
+    .tdi-pill {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: var(--mono);
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.07);
+      color: var(--text-muted);
+    }
+    .tdi-pill.val-1, .tdi-pill.val-2 { color: #34D399; background: rgba(16, 185, 129, 0.12); }
+    .tdi-pill.val-3 { color: #FBBF24; background: rgba(245, 158, 11, 0.12); }
+    .tdi-pill.val-4, .tdi-pill.val-5 { color: #F87171; background: rgba(239, 68, 68, 0.12); }
+
+    /* Footer */
+    .panel-footer {
+      padding: 10px 18px;
+      border-top: 1px solid var(--panel-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(11, 15, 25, 0.6);
+      font-size: 11px;
+      color: var(--text-dim);
+      font-family: var(--mono);
+    }
+
+    /* Modal / Overlay */
+    .loader-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(7, 11, 18, 0.85);
+      backdrop-filter: blur(8px);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      z-index: 50;
+    }
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid rgba(6, 182, 212, 0.2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .shutdown-screen {
+      position: fixed;
+      inset: 0;
+      background: #030712;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      z-index: 999;
+    }
+    .shutdown-screen h2 { font-size: 18px; color: var(--text); }
+    .shutdown-screen p { font-size: 13px; color: var(--text-dim); }
+
+    /* Responsive for Tablets and Smartphones */
+    @media (max-width: 900px) {
+      body { overflow-y: auto; height: auto; }
+      main { grid-template-columns: 1fr; overflow: visible; padding: 12px; gap: 14px; }
+      .viewport-panel { min-height: 380px; height: 420px; }
+      .results-panel { overflow: visible; }
+      .taxa-table-container { max-height: 300px; }
+      .hero-card { padding: 16px; }
+      .tdi-number { font-size: 36px; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <img src="/icon.svg" alt="Icon">
+      <div class="brand-title">zar manah diatom tdi</div>
+    </div>
+    <div class="header-actions">
+      <button class="btn-quit" id="quitBtn" title="Quit">Quit</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Viewport Panel -->
+    <section class="viewport-panel">
+      <div class="viewport-toolbar">
+        <div style="display: flex; gap: 8px;">
+          <button class="btn-action btn-primary" id="uploadBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload Image
+          </button>
+          <button class="btn-action" id="sampleBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+            Load Sample
+          </button>
+        </div>
+        <div class="toggle-group">
+          <label><input type="checkbox" id="toggleBoxes" checked> Bounding Boxes</label>
+          <label><input type="checkbox" id="toggleLabels" checked> Labels</label>
+        </div>
+      </div>
+
+      <div class="canvas-container" id="canvasContainer">
+        <canvas id="imageCanvas"></canvas>
+        <div class="drop-zone" id="dropZone">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <p>Drop microscopy or smartphone photo here</p>
+          <span>TIFF · PNG · JPG (100% Offline Processing)</span>
+        </div>
+      </div>
+      <input type="file" id="fileInput" accept="image/*" capture="environment" style="display: none;">
+    </section>
+
+    <!-- Results Panel -->
+    <section class="results-panel">
+      <!-- Hero TDI -->
+      <div class="hero-card">
+        <div class="tdi-display">
+          <div class="tdi-label">Trophic Diatom Index</div>
+          <div class="tdi-value-row">
+            <div class="tdi-number" id="tdiValue">--</div>
+            <div class="tdi-x10" id="tdiX10">TDI x10: --</div>
+          </div>
+        </div>
+        <div class="quality-badge" id="qualityBadge">
+          <span id="qualityText">READY</span>
+          <span class="quality-sub" id="qualitySub">Awaiting sample</span>
+        </div>
+      </div>
+
+      <!-- Stats Grid -->
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Cells Counted</span>
+          <span class="stat-val" id="statCells">0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Valued Biomass</span>
+          <span class="stat-val" id="statValued">0%</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Planktonic</span>
+          <span class="stat-val" id="statPlank">0%</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Confidence</span>
+          <span class="stat-val" id="statConf">--</span>
+        </div>
+      </div>
+
+      <!-- Taxa Table -->
+      <div class="table-container">
+        <div class="table-header">
+          <span>Identified Assemblage</span>
+          <span id="taxaCount">0 taxa</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Taxon</th>
+              <th style="text-align: right;">Count</th>
+              <th style="text-align: right;">Share</th>
+              <th style="text-align: right;">TDI Sensitivity</th>
+            </tr>
+          </thead>
+          <tbody id="taxaBody">
+            <tr><td colspan="4" style="color: var(--text-dim); text-align: center; padding: 24px;">No sample evaluated yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="panel-footer">
+        <span id="latencyDisplay">Latency: -- ms</span>
+        <button class="btn-action" id="exportBtn" style="padding: 4px 8px; font-size: 11px;">Export JSON</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Loader -->
+  <div class="loader-overlay" id="loader">
+    <div class="spinner"></div>
+    <div style="font-size: 13px; font-weight: 600; color: #FFF;">Processing...</div>
+  </div>
+
+  <!-- Clean Shutdown Screen -->
+  <div class="shutdown-screen" id="shutdownScreen">
+    <h2>Server Terminated</h2>
+    <p>Application closed.</p>
+  </div>
+
+  <script>
+    // State
+    let currentImage = null;
+    let currentResults = null;
+
+    // Elements
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const canvas = document.getElementById('imageCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Heartbeat for auto-shutdown when window closed
+    setInterval(() => {
+      fetch('/api/heartbeat', { method: 'POST' }).catch(() => {});
+    }, 2500);
+
+    // Immediate ping when window gains visibility
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        fetch('/api/heartbeat', { method: 'POST' }).catch(() => {});
+      }
+    });
+
+    // Unload triggers beacon
+    window.addEventListener('beforeunload', () => {
+      navigator.sendBeacon('/api/shutdown');
+    });
+
+    // Quit button
+    document.getElementById('quitBtn').addEventListener('click', () => {
+      fetch('/api/shutdown', { method: 'POST' }).finally(() => {
+        shutdownScreen.style.display = 'flex';
+        setTimeout(() => window.close(), 600);
+      });
+    });
+
+    // Upload & Sample Handlers
+    document.getElementById('uploadBtn').onclick = () => fileInput.click();
+    dropZone.onclick = () => fileInput.click();
+    fileInput.onchange = (e) => {
+      if (e.target.files.length) processFile(e.target.files[0]);
+    };
+
+    dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add('dragover'); };
+    dropZone.ondragleave = () => dropZone.classList.remove('dragover');
+    dropZone.ondrop = (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) processFile(e.dataTransfer.files[0]);
+    };
+
+    document.getElementById('sampleBtn').onclick = () => {
+      loader.style.display = 'flex';
+      fetch('/api/sample')
+        .then(r => r.blob())
+        .then(blob => processFile(new File([blob], "sample.png", { type: "image/png" })))
+        .catch(err => alert("Could not load sample: " + err));
+    };
+
+    function processFile(file) {
+      loader.style.display = 'flex';
+      dropZone.style.display = 'none';
+
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      img.onload = () => {
+        currentImage = img;
+        renderCanvas();
+      };
+
+      const formData = new FormData();
+      formData.append('image', file);
+
+      fetch('/api/analyze', { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(data => {
+          if (!data.success) throw new Error(data.error);
+          currentResults = data;
+          renderResults(data);
+          renderCanvas();
+        })
+        .catch(err => {
+          alert('Analysis Error: ' + err.message);
+        })
+        .finally(() => {
+          loader.style.display = 'none';
+        });
+    }
+
+    function renderResults(data) {
+      document.getElementById('tdiValue').innerText = data.tdi !== null ? data.tdi.toFixed(2) : 'N/A';
+      document.getElementById('tdiX10').innerText = data.tdi_x10 !== null ? `TDI x10: ${data.tdi_x10.toFixed(1)}` : 'TDI x10: --';
+
+      const badge = document.getElementById('qualityBadge');
+      badge.className = 'quality-badge ' + (data.quality || '').toLowerCase();
+      document.getElementById('qualityText').innerText = data.quality || 'N/A';
+      document.getElementById('qualitySub').innerText = data.quality_desc || 'Water Quality Status';
+
+      document.getElementById('statCells').innerText = data.total_cells;
+      document.getElementById('statValued').innerText = data.value_mass + '%';
+      document.getElementById('statPlank').innerText = data.planktonic_fraction + '%';
+      document.getElementById('statConf').innerText = data.mean_confidence + '%';
+      document.getElementById('latencyDisplay').innerText = `Inference: ${data.latency_ms} ms`;
+
+      const tbody = document.getElementById('taxaBody');
+      tbody.innerHTML = '';
+      document.getElementById('taxaCount').innerText = `${data.taxa.length} taxa`;
+
+      if (data.taxa.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="color: var(--text-dim); text-align: center; padding: 24px;">No cells detected above confidence threshold</td></tr>';
+        return;
+      }
+
+      data.taxa.forEach(t => {
+        const tr = document.createElement('tr');
+        const pillClass = t.tdi_value ? `val-${Math.round(t.tdi_value)}` : '';
+        tr.innerHTML = `
+          <td class="taxon-name">${t.name}</td>
+          <td style="text-align: right; font-family: var(--mono);">${t.count}</td>
+          <td style="text-align: right; font-family: var(--mono); color: var(--text-muted);">${t.percent}%</td>
+          <td style="text-align: right;"><span class="tdi-pill ${pillClass}">${t.tdi_value !== null ? t.tdi_value : 'unvalued'}</span></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderCanvas() {
+      if (!currentImage) return;
+      canvas.width = currentImage.width;
+      canvas.height = currentImage.height;
+      ctx.drawImage(currentImage, 0, 0);
+
+      const showBoxes = document.getElementById('toggleBoxes').checked;
+      const showLabels = document.getElementById('toggleLabels').checked;
+
+      if (showBoxes && currentResults && currentResults.detections) {
+        currentResults.detections.forEach(d => {
+          const [x0, y0, x1, y1] = d.box;
+          const w = x1 - x0;
+          const h = y1 - y0;
+
+          // Box
+          ctx.strokeStyle = '#06B6D4';
+          ctx.lineWidth = Math.max(2, Math.round(canvas.width / 400));
+          ctx.strokeRect(x0, y0, w, h);
+
+          // Fill highlight
+          ctx.fillStyle = 'rgba(6, 182, 212, 0.08)';
+          ctx.fillRect(x0, y0, w, h);
+
+          if (showLabels) {
+            const label = `${d.taxon} (${Math.round(d.conf * 100)}%)`;
+            const fontSize = Math.max(12, Math.round(canvas.width / 55));
+            ctx.font = `600 ${fontSize}px var(--mono)`;
+            const textW = ctx.measureText(label).width;
+
+            ctx.fillStyle = 'rgba(7, 11, 18, 0.85)';
+            ctx.fillRect(x0, Math.max(0, y0 - fontSize - 6), textW + 10, fontSize + 6);
+
+            ctx.fillStyle = '#38BDF8';
+            ctx.fillText(label, x0 + 5, Math.max(fontSize, y0 - 4));
+          }
+        });
+      }
+    }
+
+    document.getElementById('toggleBoxes').onchange = renderCanvas;
+    document.getElementById('toggleLabels').onchange = renderCanvas;
+
+    document.getElementById('exportBtn').onclick = () => {
+      if (!currentResults) return;
+      const blob = new Blob([JSON.stringify(currentResults, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `diatom_tdi_report_${Date.now()}.json`;
+      a.click();
+    };
+  </script>
+</body>
+</html>
