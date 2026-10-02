@@ -117,6 +117,14 @@ $$\mathbb{E}[\Delta \text{TDI}] = \sum_{j=1}^{K} p_j^* \left[ \sum_{i \neq j} C_
 
 ---
 
+## 👤 Author & Affiliation
+* **Author:** Zar Manah
+* **Affiliation:** Independent Researcher, Madrid, Spain
+* **ORCID:** [0009-0007-8443-8999](https://orcid.org/0009-0007-8443-8999)
+* **Correspondence:** 
+
+---
+
 ## 📖 Citation
 
 If you use this software or empirical error damping findings in your research, please cite:
@@ -125,6 +133,7 @@ If you use this software or empirical error damping findings in your research, p
 @article{manah2026bridging,
   title={Bridging Computer Vision and Freshwater Biomonitoring: Deep Learning-Driven Trophic Diatom Index Estimation and Empirical Error Damping Across 294 Natural River Assemblages},
   author={Manah, Zar},
+  affiliation={Independent Researcher, Madrid, Spain},
   journal={bioRxiv / Zenodo Preprints},
   year={2026},
   doi={10.5281/zenodo.23108803}
