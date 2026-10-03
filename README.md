@@ -6,8 +6,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![WFD Compliant](https://img.shields.io/badge/WFD%20Directive-2000%2F60%2FEC-06B6D4.svg)](https://environment.ec.europa.eu/topics/water/water-framework-directive_en)
 [![Offline Privacy](https://img.shields.io/badge/Privacy-100%25%20Offline%20%2F%20Zero%20Cloud-success.svg)](#privacy--data-sovereignty)
+[![Crafted in Spain](https://img.shields.io/badge/Crafted%20in-Spain%20%F0%9F%87%AA%F0%9F%87%B8-yellow.svg)](#)
 
-> **Autonomous Computational Limnology Engine:** An end-to-end, edge-deployable deep learning pipeline that directly estimates the Kelly & Whitton (1995) **Trophic Diatom Index (TDI)** and Water Framework Directive (WFD) water quality classes from raw light microscopy images and smartphone eyepiece photographs in under 11 seconds.
+> **AI for Water Purity Assessment:** Autonomous Computational Limnology Engine for deep learning-driven Trophic Diatom Index (TDI) estimation from microscopy images. An end-to-end, edge-deployable deep learning pipeline that directly estimates the Kelly & Whitton (1995) **Trophic Diatom Index (TDI)** and Water Framework Directive (WFD) water quality classes from raw light microscopy images and smartphone eyepiece photographs in under 11 seconds. Crafted in Spain 🇪🇸.
 
 ---
 
