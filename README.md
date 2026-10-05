@@ -2,7 +2,7 @@
   <img src="diatomeas-icon.png" width="128" alt="Diatomeas icon" />
 </p>
 
-# zar manah diatom tdi 🧬
+# Diatom-TDI 🧬 — AI Water Purity Assessment from Microscopy Images
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.0+](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
