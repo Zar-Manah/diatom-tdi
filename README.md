@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="diatomeas-icon.png" width="128" alt="Diatomeas icon" />
+</p>
+
 # zar manah diatom tdi 🧬
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
