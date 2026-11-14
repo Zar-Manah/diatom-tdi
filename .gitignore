@@ -1,0 +1,33 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Large binary checkpoints (> 100MB, handle via GitHub Releases / Git LFS)
+*.pt
+*.bin
+checkpoints/
+
+# Large raw datasets (> 100MB)
+data/diatlats_diatoms.zip
+data/ude_diatoms_2024.zip
+data/UDE Diatoms in the Wild 2024/
+
+# Native App bundles & large archives
+Diatomeas.app/
+*.pyz
+*.dmg
+*.zip
+
+# OS artifacts
+.DS_Store
+*.swp
+*.tmp
+
+# Distribution packages & outputs
+dist/
+build/
+
+# Internal lab state & reports
+state/
+reports/
