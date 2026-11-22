@@ -91,12 +91,12 @@ def ensure_ude_data(data_root: Path, zip_path: Path) -> None:
     zip_path.parent.mkdir(parents=True, exist_ok=True)
     if not zip_path.exists() or zip_path.stat().st_size < 2_000_000_000:
         log(f"downloading UDE -> {zip_path}")
-        rc = os.system(f'wget -c -O "{zip_path}" "{url}" >> /content/ckpt/uedl.log 2>&1')
+        rc = os.system(f'wget -c -O "{zip_path}" "{url}" >> "{zip_path.parent / "uedl.log"}" 2>&1')
         if rc != 0:
             raise RuntimeError("wget UDE failed")
     data_root.mkdir(parents=True, exist_ok=True)
     log("unzipping UDE")
-    rc = os.system(f'unzip -o -q "{zip_path}" -d "{data_root}" >> /content/ckpt/uedl.log 2>&1')
+    rc = os.system(f'unzip -o -q "{zip_path}" -d "{data_root}" >> "{zip_path.parent / "uedl.log"}" 2>&1')
     if rc != 0:
         raise RuntimeError("unzip UDE failed")
     n = len(list(inner.glob("*"))) if inner.exists() else 0
@@ -143,9 +143,9 @@ def mixup_data(x, y, alpha=0.4):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--split", default="/content/split_f1.json")
-    ap.add_argument("--data-root", default="/content")
-    ap.add_argument("--zip", default="/content/ude.zip")
+    ap.add_argument("--split", default=str(Path(__file__).resolve().parent.parent / "state" / "split_f1.json"))
+    ap.add_argument("--data-root", default=str(Path(__file__).resolve().parent.parent))
+    ap.add_argument("--zip", default=str(Path(__file__).resolve().parent.parent / "ude.zip"))
     ap.add_argument("--resume", default="")
     ap.add_argument("--epochs", type=int, default=60)
     ap.add_argument("--batch", type=int, default=32)

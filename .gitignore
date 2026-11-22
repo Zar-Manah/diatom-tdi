@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Model weights and downloaded data (archived on Zenodo)
+checkpoints/
+*.pt
+ude.zip
+UDE Diatoms in the Wild 2024/
+
+# Training outputs
+runs/
+*.log
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

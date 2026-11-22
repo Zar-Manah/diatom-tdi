@@ -217,33 +217,6 @@ class DiatomClassifier:
         return torch.cat(out) if out else torch.empty(0, self.n_classes)
 
 
-class EnsembleDiatomClassifier:
-    """B3 (edited) + B0 ensemble with horizontal-flip TTA.
-
-    NOTE: this is experimental. The published dual-architecture numbers were
-    produced by `code/ensemble_eval.py` on Colab over nine checkpoints that are
-    not part of this repository, so this class is NOT validated here.
-    """
-
-    def __init__(
-        self,
-        ckpt_f2: Path = CKPT,
-        ckpt_f1: Path = ROOT / "checkpoints" / "f1" / "best.pt",
-        device: str | None = None,
-    ):
-        self.clf_f2 = DiatomClassifier(ckpt=ckpt_f2, device=device)
-        self.clf_f1 = DiatomClassifier(ckpt=ckpt_f1, device=device) if Path(ckpt_f1).exists() else None
-        self.classes = self.clf_f2.classes
-        self.n_classes = self.clf_f2.n_classes
-
-    def classify(self, images: list[Image.Image], batch_size: int = 32, tta: bool = True) -> torch.Tensor:
-        p2 = self.clf_f2.classify(images, batch_size=batch_size, tta=tta)
-        if self.clf_f1 is not None:
-            p1 = self.clf_f1.classify(images, batch_size=batch_size, tta=tta)
-            return 0.75 * p2 + 0.25 * p1
-        return p2
-
-
 # --------------------------------------------------------------------------- #
 # counting
 # --------------------------------------------------------------------------- #
@@ -525,7 +498,7 @@ class TdiResult:
     mean_confidence: float = 0.0
     planktonic_fraction: float = 0.0
     quality: str = ""
-    quality_es: str = ""
+    quality_description: str = ""
     tdi100: float | None = None
 
     def as_dict(self) -> dict:
@@ -605,7 +578,7 @@ def compute_tdi(
     if den > 0:
         res.tdi = num / den
         res.tdi100 = 25.0 * res.tdi - 25.0
-        res.quality, res.quality_es = band_for(res.tdi100)
+        res.quality, res.quality_description = band_for(res.tdi100)
     return res
 
 
@@ -667,7 +640,7 @@ def main() -> int:
     if res.tdi is None:
         print("TDI           n/a - no counted benthic taxon carries a published TDI value")
     else:
-        print(f"TDI           {res.tdi100:.1f} / 100  (raw {res.tdi:.3f})  ->  {res.quality} / {res.quality_es}")
+        print(f"TDI           {res.tdi100:.1f} / 100  (raw {res.tdi:.3f})  ->  {res.quality} / {res.quality_description}")
     print()
     print("top taxa:")
     for name, n in list(res.as_dict()["counts"].items())[:10]:

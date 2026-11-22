@@ -9,7 +9,7 @@ sellado y produce label_audit.json:
   - class_weights: peso por clase (mean 1, clip [1,3]) derivado del error
   - confusions: top true->pred para el informe
   - val_suspects: reportados aparte (NO se cuarentenan)
-Salida: /content/ckpt/label_audit.json
+Output: state/label_audit.json
 """
 import json
 import sys
@@ -23,10 +23,11 @@ from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
-CKPT = Path("/content/ckpt")
-SPLIT = Path("/content/split_f1.json")
+ROOT = Path(__file__).resolve().parent.parent
+CKPT = ROOT / "checkpoints" / "f2"
+SPLIT = ROOT / "state" / "split_f1.json"
 BEST = CKPT / "best.pt"
-OUT = CKPT / "label_audit.json"
+OUT = ROOT / "state" / "label_audit.json"
 BATCH = 64
 PROB_MIN = 0.85
 
@@ -66,14 +67,14 @@ def ensure_ude(data_root: Path, zip_path: Path) -> None:
     if not zip_path.exists() or zip_path.stat().st_size < 2_000_000_000:
         log("descargando UDE...")
         rc = __import__("os").system(
-            f'wget -c -O "{zip_path}" "{url}" >> /content/ckpt/uedl.log 2>&1'
+            f'wget -c -O "{zip_path}" "{url}" >> "{CKPT / "uedl.log"}" 2>&1'
         )
         if rc != 0:
             raise RuntimeError("wget UDE failed")
     data_root.mkdir(parents=True, exist_ok=True)
     log("unzip UDE...")
     rc = __import__("os").system(
-        f'unzip -o -q "{zip_path}" -d "{data_root}" >> /content/ckpt/uedl.log 2>&1'
+        f'unzip -o -q "{zip_path}" -d "{data_root}" >> "{CKPT / "uedl.log"}" 2>&1'
     )
     if rc != 0:
         raise RuntimeError("unzip UDE failed")
@@ -95,7 +96,7 @@ def main() -> int:
     log(f"split {split['hash'][:12]} classes={n_cls} "
         f"train={len(split['train'])} val={len(split['val'])}")
 
-    ensure_ude(Path("/content"), Path("/content/ude.zip"))
+    ensure_ude(ROOT, ROOT / "ude.zip")
 
     ck = torch.load(BEST, map_location="cpu")
     model_name = ck.get("args", {}).get("model", "efficientnet_b3")
@@ -121,7 +122,7 @@ def main() -> int:
     confusions = defaultdict(lambda: defaultdict(int))
 
     for part, items in (("train", split["train"]), ("val", split["val"])):
-        ds = ListDataset("/content", items, tfm)
+        ds = ListDataset(str(ROOT), items, tfm)
         dl = DataLoader(ds, batch_size=BATCH, shuffle=False, num_workers=2,
                         pin_memory=True)
         n_wrong = 0

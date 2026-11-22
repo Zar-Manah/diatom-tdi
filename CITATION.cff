@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: "If you use this software or the accompanying manuscript, please cite it as below."
+type: software
+title: "Diatom-TDI: deep learning estimation of the Trophic Diatom Index from light microscopy images"
+abstract: >-
+  An end-to-end, offline pipeline that estimates the Kelly & Whitton Trophic
+  Diatom Index from light microscopy images. A fine-tuned EfficientNet-B3
+  classifies 101 benthic diatom taxa, a budget-aware sliding-window detector
+  converts whole micrographs into cell counts, and the published
+  abundance-weighted index is computed with planktonic taxa excluded. The
+  repository also quantifies how single-cell classification error propagates
+  into the assemblage-level index and releases a slide-grouped split for
+  leakage-free retraining.
+authors:
+  - family-names: Manah
+    given-names: Zar
+    orcid: "https://orcid.org/0009-0007-8443-8999"
+    affiliation: "Independent Researcher, Madrid, Spain"
+version: 1.0.0
+date-released: 2026-11-22
+doi: 10.5281/zenodo.24443740
+url: "https://github.com/Zar-Manah/diatom-tdi"
+repository-code: "https://github.com/Zar-Manah/diatom-tdi"
+license: MIT
+keywords:
+  - diatoms
+  - Trophic Diatom Index
+  - water quality
+  - Water Framework Directive
+  - deep learning
+  - computer vision
+  - limnology
+  - EfficientNet

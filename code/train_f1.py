@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""F1 crash-safe trainer — diatomeas top-N.
+"""Phase-1 trainer (EfficientNet-B0) for the diatom classifier.
 
-Resume real: checkpoint guarda model+optimizer+scheduler+scaler+epoch+split_hash.
-Si el split no cuadra con el checkpoint → aborta (nunca resume sucio).
-Colab exec trap: ignora argv si argv[0] no es este script.
+The checkpoint stores model, optimizer, scheduler, scaler, epoch and split
+hash. Resuming aborts if the split hash does not match, so a stale run can
+never be continued by accident.
 """
 import argparse
 import csv
@@ -25,7 +25,8 @@ from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
-CKPT = Path("/content/ckpt")
+ROOT = Path(__file__).resolve().parent.parent
+CKPT = ROOT / "checkpoints" / "f1"
 CKPT.mkdir(parents=True, exist_ok=True)
 LOG = CKPT / "train_log.csv"
 
@@ -99,12 +100,12 @@ def ensure_ude_data(data_root: Path, zip_path: Path) -> None:
     zip_path.parent.mkdir(parents=True, exist_ok=True)
     if not zip_path.exists() or zip_path.stat().st_size < 2_000_000_000:
         log(f"downloading UDE -> {zip_path}")
-        rc = os.system(f'wget -c -O "{zip_path}" "{url}" >> /content/ckpt/uedl.log 2>&1')
+        rc = os.system(f'wget -c -O "{zip_path}" "{url}" >> "{CKPT / "uedl.log"}" 2>&1')
         if rc != 0:
             raise RuntimeError("wget UDE failed")
     data_root.mkdir(parents=True, exist_ok=True)
     log("unzipping UDE")
-    rc = os.system(f'unzip -o -q "{zip_path}" -d "{data_root}" >> /content/ckpt/uedl.log 2>&1')
+    rc = os.system(f'unzip -o -q "{zip_path}" -d "{data_root}" >> "{CKPT / "uedl.log"}" 2>&1')
     if rc != 0:
         raise RuntimeError("unzip UDE failed")
     n = len(list(inner.glob("*"))) if inner.exists() else 0
@@ -132,9 +133,9 @@ def save_ckpt(path: Path, **kw) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--split", default="/content/split_f1.json")
-    ap.add_argument("--data-root", default="/content")
-    ap.add_argument("--zip", default="/content/ude.zip")
+    ap.add_argument("--split", default=str(ROOT / "state" / "split_f1.json"))
+    ap.add_argument("--data-root", default=str(ROOT))
+    ap.add_argument("--zip", default=str(ROOT / "ude.zip"))
     ap.add_argument("--resume", default="")
     ap.add_argument("--epochs", type=int, default=60)
     ap.add_argument("--batch", type=int, default=64)
