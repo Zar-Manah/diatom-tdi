@@ -15,7 +15,7 @@ import torch.nn.functional as F
 from PIL import Image
 
 # Importar dependencias del proyecto
-diat_root = Path.home() / "Desktop/OpenCode/diatomeas"
+diat_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(diat_root / "code"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 

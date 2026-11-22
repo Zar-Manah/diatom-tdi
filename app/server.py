@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import cgi
 import io
 import json
 import os
@@ -13,6 +12,8 @@ import sys
 import threading
 import time
 import webbrowser
+from email.parser import BytesParser
+from email.policy import default
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 
@@ -22,8 +23,6 @@ if (APP_DIR / "code" / "tdi.py").exists():
     ROOT_DIR = APP_DIR
 elif (APP_DIR.parent / "code" / "tdi.py").exists():
     ROOT_DIR = APP_DIR.parent
-elif (Path.home() / "Desktop/OpenCode/diatomeas/code/tdi.py").exists():
-    ROOT_DIR = Path.home() / "Desktop/OpenCode/diatomeas"
 else:
     ROOT_DIR = APP_DIR.parent
 
@@ -32,7 +31,7 @@ sys.path.insert(0, str(CODE_DIR))
 
 from PIL import Image
 import torch
-from tdi import DiatomClassifier, TdiTable, count_cells, compute_tdi, CKPT, TABLE
+from tdi import DiatomClassifier, TdiTable, count_cells, compute_tdi, sweep_plan, CKPT, TABLE
 
 # Global State
 LAST_HEARTBEAT = time.time()
@@ -57,12 +56,50 @@ def get_free_port(start_port: int = 8765) -> int:
                 return port
     return start_port
 
+
+def _sweep_info(width: int, height: int, window: int = 150,
+                stride_frac: float = 0.5, max_windows: int = 1200) -> dict:
+    """Honest description of the grid that was actually swept.
+
+    `covers_full_frame` is true by construction (origins span edge to edge);
+    `dense_grid` is false when the window budget forced a wider stride than the
+    one requested, which the UI surfaces instead of pretending it was dense.
+    """
+    xs, ys, step = sweep_plan(width, height, window, stride_frac, max_windows)
+    return {
+        "windows": len(xs) * len(ys),
+        "step_px": step,
+        "window_px": window,
+        "covers_full_frame": xs[-1] + window >= width and ys[-1] + window >= height,
+        "dense_grid": step <= max(1, int(window * stride_frac)) + 1,
+    }
+
+
 def ensure_model_loaded():
     global CLASSIFIER, TDI_TABLE
     if TDI_TABLE is None:
         TDI_TABLE = TdiTable.load(TABLE)
     if CLASSIFIER is None:
         CLASSIFIER = DiatomClassifier(ckpt=CKPT)
+
+
+def _multipart_image(content_type: str, body: bytes) -> bytes | None:
+    """Pull the `image` part out of a multipart/form-data body.
+
+    `cgi` was removed from the standard library in Python 3.13, so the email
+    parser does the job instead: it is part of the stdlib and understands the
+    same MIME framing.
+    """
+    header = b"Content-Type: " + content_type.encode("latin-1", "replace") + b"\r\n"
+    msg = BytesParser(policy=default).parsebytes(
+        header + b"MIME-Version: 1.0\r\n\r\n" + body
+    )
+    for part in msg.iter_parts():
+        if part.get_param("name", header="content-disposition") == "image":
+            payload = part.get_payload(decode=True)
+            if payload:
+                return payload
+    return None
 
 def watchdog_thread():
     """Shuts down server automatically if client closes the tab/window."""
@@ -130,7 +167,7 @@ class AppRequestHandler(SimpleHTTPRequestHandler):
             }).encode())
             return
 
-        super().do_GET()
+        self.send_error(404)
 
     def do_POST(self):
         global LAST_HEARTBEAT, CLIENT_ATTACHED, SHUTDOWN_TRIGGERED
@@ -145,6 +182,9 @@ class AppRequestHandler(SimpleHTTPRequestHandler):
             return
 
         elif self.path == "/api/shutdown":
+            if self.client_address[0] not in ("127.0.0.1", "::1"):
+                self.send_error(403, "Local access only")
+                return
             SHUTDOWN_TRIGGERED = True
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -172,24 +212,13 @@ class AppRequestHandler(SimpleHTTPRequestHandler):
                     return
 
                 content_type = self.headers.get("Content-Type", "")
+                body = self.rfile.read(content_len)
                 raw_bytes = None
 
                 if "multipart/form-data" in content_type:
-                    environ = {
-                        "REQUEST_METHOD": "POST",
-                        "CONTENT_TYPE": content_type,
-                        "CONTENT_LENGTH": str(content_len),
-                    }
-                    form = cgi.FieldStorage(
-                        fp=self.rfile,
-                        headers=self.headers,
-                        environ=environ,
-                        keep_blank_values=True
-                    )
-                    if "image" in form:
-                        raw_bytes = form["image"].file.read()
+                    raw_bytes = _multipart_image(content_type, body)
                 else:
-                    raw_bytes = self.rfile.read(content_len)
+                    raw_bytes = body
 
                 if not raw_bytes:
                     self.send_error(400, "No image received")
@@ -207,8 +236,9 @@ class AppRequestHandler(SimpleHTTPRequestHandler):
                     conf_thr=0.48,
                     nms_iou=0.30,
                     cross_class_iou=0.70,
-                    refine=True,
-                    max_windows=800,
+                    merge=True,
+                    refine=False,
+                    max_windows=1200,
                     scale=1.0,
                 )
                 res = compute_tdi(dets, TDI_TABLE)
@@ -238,8 +268,8 @@ class AppRequestHandler(SimpleHTTPRequestHandler):
 
                 payload = {
                     "success": True,
-                    "tdi": None if res.tdi is None else round(res.tdi, 2),
-                    "tdi_x10": None if res.tdi_x10 is None else round(res.tdi_x10, 1),
+                    "tdi": None if res.tdi is None else round(res.tdi, 3),
+                    "tdi100": None if res.tdi100 is None else round(res.tdi100, 1),
                     "quality": res.quality or "Undefined",
                     "quality_desc": res.quality_es,
                     "total_cells": res.total_cells,
@@ -249,6 +279,7 @@ class AppRequestHandler(SimpleHTTPRequestHandler):
                     "planktonic_fraction": round(res.planktonic_fraction * 100, 1),
                     "latency_ms": round(dt, 0),
                     "image_size": [orig_w, orig_h],
+                    "sweep": _sweep_info(orig_w, orig_h),
                     "taxa": taxa_list,
                     "detections": det_boxes,
                 }
@@ -285,13 +316,13 @@ def main():
     signal.signal(signal.SIGTERM, lambda sig, frame: os._exit(0))
 
     port = args.port if args.port else get_free_port(8765)
-    host = args.host if args.host else "0.0.0.0"
-    lan_ip = get_lan_ip()
+    host = args.host if args.host else ("0.0.0.0" if args.lan else "127.0.0.1")
+    lan_ip = get_lan_ip() if host == "0.0.0.0" else "127.0.0.1"
 
     print("=" * 50)
     print("zar manah diatom tdi")
     print(f"En este ordenador: http://127.0.0.1:{port}")
-    if lan_ip != "127.0.0.1":
+    if host == "0.0.0.0" and lan_ip != "127.0.0.1":
         print(f"En tu movil / red:  http://{lan_ip}:{port}")
     print("=" * 50)
 

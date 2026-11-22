@@ -521,7 +521,7 @@
         <div class="drop-zone" id="dropZone">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
           <p>Drop microscopy or smartphone photo here</p>
-          <span>TIFF · PNG · JPG (100% Offline Processing)</span>
+          <span>TIFF · PNG · JPG (procesamiento local)</span>
         </div>
       </div>
       <input type="file" id="fileInput" accept="image/*" capture="environment" style="display: none;">
@@ -535,7 +535,7 @@
           <div class="tdi-label">Trophic Diatom Index</div>
           <div class="tdi-value-row">
             <div class="tdi-number" id="tdiValue">--</div>
-            <div class="tdi-x10" id="tdiX10">TDI x10: --</div>
+            <div class="tdi-x10" id="tdiRaw">raw TDI: --</div>
           </div>
         </div>
         <div class="quality-badge" id="qualityBadge">
@@ -694,8 +694,10 @@
     }
 
     function renderResults(data) {
-      document.getElementById('tdiValue').innerText = data.tdi !== null ? data.tdi.toFixed(2) : 'N/A';
-      document.getElementById('tdiX10').innerText = data.tdi_x10 !== null ? `TDI x10: ${data.tdi_x10.toFixed(1)}` : 'TDI x10: --';
+      document.getElementById('tdiValue').innerText = data.tdi100 !== null ? data.tdi100.toFixed(1) : 'N/A';
+      document.getElementById('tdiRaw').innerText = data.tdi !== null
+        ? `raw TDI: ${data.tdi.toFixed(3)} / 5  (Kelly & Whitton 1995)`
+        : 'raw TDI: --';
 
       const badge = document.getElementById('qualityBadge');
       badge.className = 'quality-badge ' + (data.quality || '').toLowerCase();

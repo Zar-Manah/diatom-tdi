@@ -24,16 +24,18 @@ from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
-CKPT = Path("/content/ckpt")
-CKPT.mkdir(parents=True, exist_ok=True)
-LOG = CKPT / "train_log.csv"
+# Output dir is resolved in main(); these stay None until then so the module can
+# be imported without touching the filesystem.
+CKPT: Path | None = None
+LOG: Path | None = None
 
 
 def log(msg: str) -> None:
     line = f"[{time.strftime('%H:%M:%S')}] {msg}"
     print(line, flush=True)
-    with open(CKPT / "train.log", "a") as f:
-        f.write(line + "\n")
+    if CKPT is not None:
+        with open(CKPT / "train.log", "a") as f:
+            f.write(line + "\n")
 
 
 class ListDataset(Dataset):
@@ -153,10 +155,28 @@ def main() -> int:
     ap.add_argument("--num-workers", type=int, default=2)
     ap.add_argument("--mixup", type=float, default=0.4)
     ap.add_argument("--gate", type=float, default=85.0)
+    ap.add_argument("--out", default="", help="output dir (default runs/<split>-<model>)")
+    ap.add_argument("--log-every", type=int, default=100,
+                    help="print progress every N batches (0 = only per epoch)")
+    ap.add_argument("--max-steps", type=int, default=0,
+                    help="cap batches per epoch (smoke test only; 0 = full epoch)")
     args = ap.parse_args(_argv)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    log(f"device={device} torch={torch.__version__} model={args.model} size={args.img_size}")
+    global CKPT, LOG
+    out = Path(args.out) if args.out else Path(__file__).resolve().parent.parent / "runs" / (
+        Path(args.split).stem + "_" + args.model
+    )
+    CKPT = out
+    CKPT.mkdir(parents=True, exist_ok=True)
+    LOG = CKPT / "train_log.csv"
+
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
+    log(f"device={device} torch={torch.__version__} model={args.model} size={args.img_size} out={CKPT}")
 
     with open(args.split) as f:
         split = json.load(f)
@@ -175,9 +195,14 @@ def main() -> int:
     model = timm.create_model(args.model, pretrained=True, num_classes=n_cls)
     model = model.to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.02)
-    total_steps = max(1, (len(split["train"]) // args.batch) * args.epochs)
+    steps_per_epoch = len(split["train"]) // args.batch
+    if args.max_steps:
+        steps_per_epoch = min(steps_per_epoch, args.max_steps)
+    total_steps = max(1, steps_per_epoch * args.epochs)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=total_steps, eta_min=1e-6)
-    scaler = torch.amp.GradScaler("cuda")
+    # GradScaler is CUDA-only; MPS/CPU run the same loop without loss scaling.
+    scaler = torch.amp.GradScaler("cuda") if device.type == "cuda" else None
+    amp_dtype = torch.float16 if device.type == "cuda" else None
     criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
     start_epoch = 0
@@ -192,7 +217,7 @@ def main() -> int:
         model.load_state_dict(ck["model"])
         opt.load_state_dict(ck["optimizer"])
         sched.load_state_dict(ck["scheduler"])
-        if ck.get("scaler"):
+        if ck.get("scaler") and scaler is not None:
             scaler.load_state_dict(ck["scaler"])
         start_epoch = int(ck["epoch"])
         best_acc = float(ck.get("best_acc", 0.0))
@@ -226,20 +251,35 @@ def main() -> int:
             if args.mixup > 0 and np.random.rand() < 0.5:
                 xb, ya, yb2, lam = mixup_data(xb, yb, args.mixup)
                 opt.zero_grad(set_to_none=True)
-                with torch.amp.autocast("cuda"):
+                with torch.autocast("cuda", dtype=amp_dtype, enabled=amp_dtype is not None):
                     logits = model(xb)
                     loss = lam * criterion(logits, ya) + (1.0 - lam) * criterion(logits, yb2)
             else:
                 opt.zero_grad(set_to_none=True)
-                with torch.amp.autocast("cuda"):
+                with torch.autocast("cuda", dtype=amp_dtype, enabled=amp_dtype is not None):
                     logits = model(xb)
                     loss = criterion(logits, yb)
-            scaler.scale(loss).backward()
-            scaler.step(opt)
-            scaler.update()
+            if scaler is not None:
+                scaler.scale(loss).backward()
+                scaler.step(opt)
+                scaler.update()
+            else:
+                loss.backward()
+                opt.step()
             sched.step()
             run_loss += loss.item()
             nb += 1
+            if args.log_every and nb % args.log_every == 0:
+                elapsed = time.time() - t0
+                rate = nb / max(elapsed, 1e-9)
+                eta_min = (steps_per_epoch - nb) / max(rate, 1e-9) / 60.0
+                log(
+                    f"  ep{epoch + 1} {nb}/{steps_per_epoch} "
+                    f"loss={run_loss / nb:.3f} lr={opt.param_groups[0]['lr']:.2e} "
+                    f"{rate:.2f} it/s eta_epoch={eta_min:.0f}min"
+                )
+            if args.max_steps and nb >= args.max_steps:
+                break
         train_loss = run_loss / max(1, nb)
 
         model.eval()
@@ -249,7 +289,7 @@ def main() -> int:
         with torch.no_grad():
             for xb, yb in val_dl:
                 xb, yb = xb.to(device, non_blocking=True), yb.to(device, non_blocking=True)
-                with torch.amp.autocast("cuda"):
+                with torch.autocast("cuda", dtype=amp_dtype, enabled=amp_dtype is not None):
                     logits = model(xb)
                     loss = criterion(logits, yb)
                 val_loss_sum += loss.item()
@@ -280,7 +320,7 @@ def main() -> int:
             model=model.state_dict(),
             optimizer=opt.state_dict(),
             scheduler=sched.state_dict(),
-            scaler=scaler.state_dict(),
+            scaler=scaler.state_dict() if scaler is not None else None,
             best_acc=best_acc,
             classes=classes,
             split_hash=split_hash,
@@ -308,7 +348,7 @@ def main() -> int:
         with torch.no_grad():
             for xb, yb in test_dl:
                 xb, yb = xb.to(device), yb.to(device)
-                with torch.amp.autocast("cuda"):
+                with torch.autocast("cuda", dtype=amp_dtype, enabled=amp_dtype is not None):
                     logits = model(xb)
                 correct += (logits.argmax(1) == yb).sum().item()
                 total += yb.size(0)

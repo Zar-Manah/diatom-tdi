@@ -15,7 +15,7 @@ try:
     from tdi import DiatomClassifier, IMAGENET_MEAN, IMAGENET_STD
 except ImportError:
     # Si tdi.py está en el repo de diatomeas
-    diat_code = Path.home() / "Desktop/OpenCode/diatomeas/code"
+    diat_code = Path(__file__).resolve().parents[1]
     if diat_code.exists():
         sys.path.insert(0, str(diat_code))
         from tdi import DiatomClassifier, IMAGENET_MEAN, IMAGENET_STD

@@ -17,7 +17,7 @@ import torch.nn.functional as F
 from PIL import Image
 
 # Importación robusta de componentes de diatomeas
-diat_root = Path.home() / "Desktop/OpenCode/diatomeas"
+diat_root = Path(__file__).resolve().parents[2]
 if diat_root.exists():
     sys.path.insert(0, str(diat_root / "code"))
 

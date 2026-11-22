@@ -11,15 +11,30 @@ Pipeline
           -> abundance-weighted TDI -> water-quality class
 
 Reference: Kelly & Whitton (1995) doi:10.1007/BF00003802.
-Per-taxon values come from data/tdi_values_101.csv (see build_tdi_table.py).
+Per-taxon values (sensitivity `s` and indicator weight `v`) come from
+data/tdi_values_101.csv (see build_tdi_table.py), sourced from the `tdi`
+dataset of the CRAN package `diathor`.
+
+Index definition (the one used by the reference implementation,
+`diathor/R/diat_tdi.R`):
+
+    TDI_raw = sum(a_i * s_i * v_i) / sum(a_i * v_i)        # 1..5
+    TDI_100 = 25 * TDI_raw - 25                            # 0..100
+
+Kelly & Whitton quality classes are defined on the 0..100 form:
+    <35 high, 35-50 good, 50-65 moderate, 65-85 poor, >85 bad
 
 Design rules
-  * Nothing invented: taxa with no published value carry no weight, and the
-    index is renormalised over the valued fraction. The returned `value_mass`
-    is how much of the counted biomass that fraction represents, so a thin
-    index is always visible instead of silently misleading.
-  * Planktonic taxa are reported separately (`planktonic_fraction`): the TDI is
-    defined on the benthic fraction only.
+  * Nothing invented: taxa with no published value (or no published indicator
+    weight) carry no weight, and the index is renormalised over the valued
+    fraction. The returned `value_mass` is how much of the counted biomass that
+    fraction represents, so a thin index is always visible instead of silently
+    misleading.
+  * Planktonic taxa are excluded from the index (`planktonic_fraction` reports
+    their share): the TDI is defined on the benthic fraction only.
+  * The morphometric prior is only meaningful when the crop aspect ratio is the
+    cell's aspect ratio. Sliding-window counting feeds square windows, where it
+    degenerates into a constant per-class bias, so it is off by default.
 """
 from __future__ import annotations
 
@@ -32,8 +47,15 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 
-ROOT = Path(__file__).resolve().parent.parent
-CKPT_EDITED = ROOT / "checkpoints" / "f2_edited" / "best_edited.pt"
+# Packaging hooks. When this module is imported straight out of the single-file
+# .pyz, there is no repository around it, so __main__.py extracts the resources
+# to a temp dir and points DIATOM_ROOT there (and DIATOM_CKPT at the checkpoint).
+# Left unset, the normal repository layout applies.
+import os
+
+ROOT = Path(os.environ["DIATOM_ROOT"]) if os.environ.get("DIATOM_ROOT") else Path(__file__).resolve().parent.parent
+_ckpt_env = os.environ.get("DIATOM_CKPT")
+CKPT_EDITED = Path(_ckpt_env) if _ckpt_env else ROOT / "checkpoints" / "f2_edited" / "best_edited.pt"
 CKPT_BASE = ROOT / "checkpoints" / "f2" / "best.pt"
 CKPT = CKPT_EDITED if CKPT_EDITED.exists() else CKPT_BASE
 TABLE = ROOT / "data" / "tdi_values_101.csv"
@@ -41,14 +63,12 @@ TABLE = ROOT / "data" / "tdi_values_101.csv"
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
 
-# Kelly & Whitton (1995) quality classes on the native 1..5 scale.
-# The literature usually reports the index multiplied by 10 (a TDI of 3.0 is
-# printed as "30"), so `TdiResult.tdi_x10` is provided alongside.
+# Kelly & Whitton quality classes on the published 0..100 scale.
 TDI_BANDS = (
-    (2.0, "Excellent", "Oligotrophic - very good water quality"),
-    (3.0, "Good", "Oligotrophic - good water quality"),
-    (4.0, "Fair", "Mesotrophic - moderate nutrient enrichment"),
-    (4.5, "Poor", "Eutrophic - high nutrient enrichment"),
+    (35.0, "Excellent", "Oligotrophic - very good water quality"),
+    (50.0, "Good", "Oligotrophic - good water quality"),
+    (65.0, "Fair", "Mesotrophic - moderate nutrient enrichment"),
+    (85.0, "Poor", "Eutrophic - high nutrient enrichment"),
     (float("inf"), "Bad", "Hypereutrophic - severe nutrient enrichment"),
 )
 
@@ -61,6 +81,7 @@ class TaxonValue:
     name: str
     value: float | None
     source: str
+    indicator: float | None = None
 
 
 @dataclass
@@ -70,7 +91,7 @@ class TdiTable:
 
     @property
     def value_array(self) -> torch.Tensor:
-        """Per-class index value; NaN where no value is published."""
+        """Per-class sensitivity `s`; NaN where no value is published."""
         t = torch.full((len(self.values),), float("nan"))
         for i, v in enumerate(self.values):
             if v.value is not None:
@@ -86,10 +107,12 @@ class TdiTable:
         with Path(path).open() as fh:
             for row in csv.DictReader(fh):
                 raw = row["tdi_value"].strip()
+                raw_v = (row.get("indicator_value") or "").strip()
                 by_name[row["class"]] = TaxonValue(
                     name=row["class"],
                     value=float(raw) if raw else None,
                     source=row["tdi_source"],
+                    indicator=float(raw_v) if raw_v else None,
                 )
         if not by_name:
             raise ValueError(f"empty TDI table: {path}")
@@ -131,7 +154,8 @@ class DiatomClassifier:
         self.model.load_state_dict(blob["model"])
         self.model.eval().to(self.device)
 
-        # Cargar perfil morfométrico biológico si existe
+        # Camera-ready morphometric prior. Only meaningful for single-cell crops,
+        # where the image aspect ratio is the cell aspect ratio.
         self.morph_file = ROOT / "data" / "morphometric_prior_101.json"
         if self.morph_file.exists():
             try:
@@ -160,12 +184,14 @@ class DiatomClassifier:
         images: list[Image.Image],
         batch_size: int = 32,
         tta: bool = False,
-        morph_prior: bool = True,
+        morph_prior: bool = False,
     ) -> torch.Tensor:
         """Return (n, n_classes) softmax probabilities.
-        
-        When tta=True, applies Test-Time Augmentation (horizontal flip averaging).
-        When morph_prior=True, gates predictions with biological aspect-ratio distributions.
+
+        `tta` averages the prediction with its horizontal flip.
+        `morph_prior` gates predictions with the biological aspect-ratio
+        distribution; it must only be enabled when each image is a single cell
+        crop, because the prior is a function of the crop aspect ratio.
         """
         out = []
         for i in range(0, len(images), batch_size):
@@ -192,7 +218,12 @@ class DiatomClassifier:
 
 
 class EnsembleDiatomClassifier:
-    """Clasificador de ultra-alto rendimiento que ensambla F2 (B3 editado) + F1 (B0) con TTA."""
+    """B3 (edited) + B0 ensemble with horizontal-flip TTA.
+
+    NOTE: this is experimental. The published dual-architecture numbers were
+    produced by `code/ensemble_eval.py` on Colab over nine checkpoints that are
+    not part of this repository, so this class is NOT validated here.
+    """
 
     def __init__(
         self,
@@ -244,6 +275,40 @@ def _nms(dets: list[Detection], iou_thr: float) -> list[Detection]:
     return kept
 
 
+def sweep_plan(
+    width: int, height: int, window: int, stride_frac: float, max_windows: int
+) -> tuple[list[int], list[int], int]:
+    """Window origins that cover the whole frame within a budget.
+
+    The naive sweep truncates at `max_windows`, so a 12 MP photo would only be
+    inspected in its top-left corner. Instead the stride is widened until the
+    frame fits the budget, then the origins are spread evenly from edge to edge
+    (`axis`), so the last window always touches the opposite border.
+
+    Returns (xs, ys, step_px). `step_px > int(window * stride_frac)` means the
+    grid is sparser than requested - callers must report that, not hide it.
+    """
+    win = max(1, min(window, width, height))
+    requested = max(1, int(win * stride_frac))
+    nx = max(1, (width - win) // requested + 1)
+    ny = max(1, (height - win) // requested + 1)
+    step = requested
+    frac = stride_frac
+    while nx * ny > max_windows:
+        frac *= 1.15
+        step = max(1, int(win * frac))
+        nx = max(1, (width - win) // step + 1)
+        ny = max(1, (height - win) // step + 1)
+
+    def axis(total: int, n: int) -> list[int]:
+        if total <= win or n == 1:
+            return [0]
+        last = total - win
+        return [round(i * last / (n - 1)) for i in range(n)]
+
+    return axis(width, nx), axis(height, ny), step
+
+
 def count_cells(
     classifier: DiatomClassifier,
     image: Image.Image,
@@ -252,14 +317,22 @@ def count_cells(
     conf_thr: float = 0.5,
     nms_iou: float = 0.3,
     cross_class_iou: float = 0.7,
-    refine: bool = True,
-    max_windows: int = 800,
+    merge: bool = True,
+    refine: bool = False,
+    max_windows: int = 1200,
     scale: float = 1.0,
 ) -> list[Detection]:
     """Detect cells in a field image by sliding the classifier over it.
 
     The classifier was trained on single-cell crops, so a field image is swept
-    with a `window`-sized square and de-duplicated with class-wise NMS.
+    with a `window`-sized square and de-duplicated in three steps:
+
+      1. class-wise NMS       removes overlapping boxes of the same class;
+      2. `_merge_fragments`   joins the contiguous pieces of one cell that the
+                              window cut apart (a cell wider than `window` is
+                              seen in two or more adjacent windows);
+      3. cross-class NMS      removes the remaining duplicates when the model
+                              changed its mind between neighbouring windows.
 
     `window` is the single most important knob: it must match the apparent cell
     size, otherwise every crop carries excess background and confidence collapses.
@@ -270,11 +343,13 @@ def count_cells(
     phone-sized input viable: sweeping a 12 MP photo 1:1 costs ~41 s, at
     scale=0.5 it is ~4x cheaper with the same detections.
 
-    refine      re-classify each surviving box cropped tight; boxes whose
-                confidence collapses were firing on background, so they are
-                dropped instead of polluting the counts.
-    cross_class_iou  same-cell detections of *different* classes are suppressed,
-                keeping the most confident one.
+    `refine` is off by default: re-cropping a box and re-classifying it loses
+    valid cells whose confidence was already close to the threshold, and it
+    deforms elongated boxes. It is kept as an option for callers that want it.
+
+    The morphometric aspect-ratio prior is deliberately NOT applied here: every
+    window is square, so the aspect ratio is 1.0 and the prior degenerates into
+    a constant per-class bias.
     """
     img = image.convert("RGB")
     if scale != 1.0:
@@ -290,23 +365,7 @@ def count_cells(
     # budget is therefore spent by widening the stride until the whole frame is
     # covered by at most max_windows positions - sampled uniformly across the
     # image, never truncated to its top-left corner.
-    nx = max(1, (W - win) // max(1, int(win * stride_frac)) + 1)
-    ny = max(1, (H - win) // max(1, int(win * stride_frac)) + 1)
-    while nx * ny > max_windows:
-        stride_frac *= 1.15
-        step = max(1, int(win * stride_frac))
-        nx = max(1, (W - win) // step + 1)
-        ny = max(1, (H - win) // step + 1)
-    step = max(1, int(win * stride_frac))
-
-    def axis(total: int, n: int) -> list[int]:
-        if total <= win or n == 1:
-            return [0]
-        last = total - win
-        return [round(i * last / (n - 1)) for i in range(n)]
-
-    xs = axis(W, nx)
-    ys = axis(H, ny)
+    xs, ys, step = sweep_plan(W, H, win, stride_frac, max_windows)
 
     crops, boxes = [], []
     for y in ys:
@@ -324,17 +383,97 @@ def count_cells(
         if conf >= conf_thr:
             dets.append(Detection(cls_idx=idx, conf=conf, box=(bx0, by0, bx1, by1)))
 
-    # class-wise NMS
     dets = _nms(dets, nms_iou)
+
+    if merge and dets:
+        dets = _merge_fragments(dets, win)
 
     if cross_class_iou is not None and cross_class_iou < 1.0:
         dets = _cross_class_nms(dets, cross_class_iou)
 
     if refine and dets:
         dets = _refine(classifier, img, dets, conf_thr)
+        if merge:
+            dets = _merge_fragments(dets, win)
         dets = _cross_class_nms(dets, cross_class_iou)
 
     return dets
+
+
+def _merge_fragments(
+    dets: list[Detection],
+    win: int,
+    gap_frac: float = 0.18,
+    min_perp: float = 0.45,
+    max_span: float = 4.0,
+) -> list[Detection]:
+    """Join the pieces of one cell that the sliding window cut apart.
+
+    A cell larger than `win` is seen by two or more adjacent windows. Those
+    boxes are contiguous rather than overlapping, so NMS keeps them and the cell
+    is counted once per piece. Two boxes are joined when they carry the same
+    class, sit within `gap_frac * win` of each other, and overlap on the
+    perpendicular axis. The union is capped at `max_span * win` so a chain of
+    background boxes cannot swallow the frame.
+    """
+    n = len(dets)
+    if n < 2:
+        return dets
+    parent = list(range(n))
+    box = {i: list(dets[i].box) for i in range(n)}
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    gap = gap_frac * win
+    for i in range(n):
+        for j in range(i + 1, n):
+            if dets[i].cls_idx != dets[j].cls_idx:
+                continue
+            ri, rj = find(i), find(j)
+            if ri == rj:
+                continue
+            ax0, ay0, ax1, ay1 = box[ri]
+            bx0, by0, bx1, by1 = box[rj]
+            wa, ha = ax1 - ax0, ay1 - ay0
+            wb, hb = bx1 - bx0, by1 - by0
+            ox = min(ax1, bx1) - max(ax0, bx0)
+            oy = min(ay1, by1) - max(ay0, by0)
+            near = (ax1 + gap >= bx0 and bx1 + gap >= ax0
+                    and ay1 + gap >= by0 and by1 + gap >= ay0)
+            if not near:
+                continue
+            if not (oy >= min_perp * min(ha, hb) or ox >= min_perp * min(wa, wb)):
+                continue
+            ux0, uy0 = min(ax0, bx0), min(ay0, by0)
+            ux1, uy1 = max(ax1, bx1), max(ay1, by1)
+            if ux1 - ux0 > max_span * win or uy1 - uy0 > max_span * win:
+                continue
+            parent[rj] = ri
+            box[ri] = [ux0, uy0, ux1, uy1]
+
+    groups: dict[int, list[Detection]] = {}
+    for i in range(n):
+        groups.setdefault(find(i), []).append(dets[i])
+    out: list[Detection] = []
+    for g in groups.values():
+        best = max(g, key=lambda d: d.conf)
+        out.append(
+            Detection(
+                cls_idx=best.cls_idx,
+                conf=best.conf,
+                box=(
+                    min(d.box[0] for d in g),
+                    min(d.box[1] for d in g),
+                    max(d.box[2] for d in g),
+                    max(d.box[3] for d in g),
+                ),
+            )
+        )
+    return out
 
 
 def _cross_class_nms(dets: list[Detection], iou_thr: float) -> list[Detection]:
@@ -387,16 +526,12 @@ class TdiResult:
     planktonic_fraction: float = 0.0
     quality: str = ""
     quality_es: str = ""
-
-    @property
-    def tdi_x10(self) -> float | None:
-        """The x10 form used in the literature ("TDI 30" == native 3.0)."""
-        return None if self.tdi is None else self.tdi * 10.0
+    tdi100: float | None = None
 
     def as_dict(self) -> dict:
         d = dict(self.__dict__)
-        d["tdi"] = None if self.tdi is None else round(self.tdi, 2)
-        d["tdi_x10"] = None if self.tdi is None else round(self.tdi * 10.0, 1)
+        d["tdi"] = None if self.tdi is None else round(self.tdi, 3)
+        d["tdi100"] = None if self.tdi100 is None else round(self.tdi100, 1)
         d["value_mass"] = round(self.value_mass, 4)
         d["mean_confidence"] = round(self.mean_confidence, 4)
         d["planktonic_fraction"] = round(self.planktonic_fraction, 4)
@@ -404,23 +539,30 @@ class TdiResult:
         return d
 
 
-def band_for(tdi: float) -> tuple[str, str]:
+def band_for(tdi100: float) -> tuple[str, str]:
+    """Kelly & Whitton quality class from the 0..100 index."""
     for hi, name, es in TDI_BANDS:
-        if tdi < hi:
+        if tdi100 < hi:
             return name, es
     return TDI_BANDS[-1][1], TDI_BANDS[-1][2]
 
 
+# Planktonic genera are excluded from the benthic index. The dataset spells one
+# genus as "Pantocksekiella"; both spellings are accepted on purpose.
 PLANKTONIC_GENUS = {
-    "cyclotella",
-    "stephanodiscus",
     "aulacoseira",
+    "conticribra",
     "cyclostephanos",
-    "thalassiosira",
+    "cyclotella",
+    "discostella",
+    "lindavia",
     "melosira",
-    "detomus",
+    "pantocsekiella",
+    "pantocksekiella",
     "skeletonema",
-    "nicomphalus",
+    "stephanocyclus",
+    "stephanodiscus",
+    "thalassiosira",
 }
 
 
@@ -441,6 +583,7 @@ def compute_tdi(
 
     planktonic = PLANKTONIC_GENUS if planktonic is None else planktonic
     plank_cells = 0
+    used_cells = 0
 
     num = 0.0
     den = 0.0
@@ -448,18 +591,21 @@ def compute_tdi(
         genus = name.split(" ")[0].lower()
         if genus in planktonic:
             plank_cells += n
-        tv = table.values[table.classes.index(name)]
-        if tv.value is None or n == 0:
             continue
-        num += tv.value * n
-        den += n
+        tv = table.values[table.classes.index(name)]
+        if tv.value is None or tv.indicator is None or n == 0:
+            continue
+        num += tv.value * tv.indicator * n
+        den += tv.indicator * n
+        used_cells += n
 
-    res.valued_cells = int(den)
+    res.valued_cells = used_cells
     res.planktonic_fraction = plank_cells / len(detections)
-    res.value_mass = den / len(detections)
+    res.value_mass = used_cells / len(detections)
     if den > 0:
         res.tdi = num / den
-        res.quality, res.quality_es = band_for(res.tdi)
+        res.tdi100 = 25.0 * res.tdi - 25.0
+        res.quality, res.quality_es = band_for(res.tdi100)
     return res
 
 
@@ -476,7 +622,7 @@ def main() -> int:
     ap.add_argument("--stride", type=float, default=0.5)
     ap.add_argument("--conf", type=float, default=0.5)
     ap.add_argument("--nms", type=float, default=0.3)
-    ap.add_argument("--max-windows", type=int, default=800)
+    ap.add_argument("--max-windows", type=int, default=1200)
     ap.add_argument("--scale", type=float, default=1.0,
                     help="shrink input before sweeping; window shrinks with it")
     ap.add_argument("--device", default=None)
@@ -508,21 +654,25 @@ def main() -> int:
         return 0
 
     print(f"image        {args.image}")
-    print(f"device       {clf.device}   model {clf.classes and ''}{Path(CKPT).name} ep{clf.epoch} (val {clf.best_acc:.2f}%)")
+    print(f"device       {clf.device}   model {Path(CKPT).name} ep{clf.epoch} (val {clf.best_acc:.2f}%)")
     print(f"seconds      {dt:.2f}")
+    w, h = Image.open(args.image).size
+    xs, ys, step = sweep_plan(w, h, args.window, args.stride, args.max_windows)
+    print(f"sweep        {len(xs) * len(ys)} windows of {args.window}px, step {step}px "
+          f"({'full frame' if step <= int(args.window * args.stride) + 1 else 'sparse grid (budget)'})")
     print(f"cells        {res.total_cells} counted, mean confidence {res.mean_confidence:.3f}")
-    print(f"planktonic   {res.planktonic_fraction * 100:.1f}% of counts")
+    print(f"planktonic   {res.planktonic_fraction * 100:.1f}% of counts (excluded from the index)")
     print(f"valued       {res.valued_cells}/{res.total_cells} cells ({res.value_mass * 100:.1f}% of mass)")
     print()
     if res.tdi is None:
-        print("TDI           n/a - no counted taxon carries a published TDI value")
+        print("TDI           n/a - no counted benthic taxon carries a published TDI value")
     else:
-        print(f"TDI           {res.tdi:.2f}  ->  {res.quality} / {res.quality_es}")
+        print(f"TDI           {res.tdi100:.1f} / 100  (raw {res.tdi:.3f})  ->  {res.quality} / {res.quality_es}")
     print()
     print("top taxa:")
     for name, n in list(res.as_dict()["counts"].items())[:10]:
         tv = table.values[table.classes.index(name)].value
-        vs = f"TDI {tv:.0f}" if tv is not None else "no value"
+        vs = f"TDI s={tv:.0f}" if tv is not None else "no value"
         print(f"  {n:>4}  {name:<48} {vs}")
     return 0
 

@@ -1,0 +1,62 @@
+{
+  "project": "diatom-tdi",
+  "phase": "F3",
+  "status": "f3_completed",
+  "updated": "2026-11-22",
+  "identity_publica": "Zar Manah",
+  "classes": 101,
+  "split_hash": "b6a0cb94aab2dd544e88de5d9c0f1c81a78aa59217c3081baf125943874f898d",
+  "train": 59444,
+  "val": 7375,
+  "test": 7375,
+  "checkpoints": {
+    "f1_best": "checkpoints/f1/best.pt",
+    "f2_best": "checkpoints/f2/best.pt",
+    "f2_edited": "checkpoints/f2_edited/best_edited.pt"
+  },
+  "metrics": {
+    "f1_test_acc": 76.0136,
+    "f1_best_val_acc": 75.8915,
+    "f2_test_acc_training_log": 77.2339,
+    "f2_test_acc_rerun": 77.9,
+    "f2_best_val_acc": 78.0068,
+    "f2_edited_test_acc": 78.16,
+    "f2_edited_epoch": 28
+  },
+  "tdi": {
+    "scale": "0..100 = 25 * raw(1..5) - 25",
+    "whole_test_true_raw": 3.1746,
+    "whole_test_pred_raw": 3.1533,
+    "whole_test_true_100": 54.4,
+    "whole_test_pred_100": 53.8,
+    "mae_raw": 0.1255,
+    "rmse_raw": 0.2334,
+    "pearson_r": 0.9665,
+    "spearman_rho": 0.9667,
+    "band_exact": "245/294",
+    "band_exact_pct": 83.33,
+    "band_within1": "290/294",
+    "band_within1_pct": 98.64,
+    "value_mass": 0.7829,
+    "planktonic_fraction": 0.11
+  },
+  "counting_audit": {
+    "exact_one_of_60": 49,
+    "zero_of_60": 5,
+    "more_than_one_of_60": 6,
+    "taxon_present_of_60": 48
+  },
+  "grouped_split": {
+    "file": "state/split_grouped.json",
+    "hash": "31d7ad2280c818b427be460e68236a5d391cfb9da95f9c7593d790c15905f668",
+    "train": 59184,
+    "val": 7528,
+    "test": 7482,
+    "shared_slides": 0
+  },
+  "tests": {
+    "unit": "70/70",
+    "artifacts": "50/50"
+  },
+  "notes": "Cifras canónicas en reports/validacion_tdi.json y paper/MANUSCRIPT.md. El split aleatorio tiene 45,61% de recortes de test con micrografía también en train; state/split_grouped.json es la alternativa limpia para reentrenar."
+}

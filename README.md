@@ -11,156 +11,244 @@
 [![Offline Privacy](https://img.shields.io/badge/Privacy-100%25%20Offline%20%2F%20Zero%20Cloud-success.svg)](#privacy--data-sovereignty)
 [![Crafted in Spain](https://img.shields.io/badge/Crafted%20in-Spain%20%F0%9F%87%AA%F0%9F%87%B8-yellow.svg)](#)
 
-> **AI for Water Purity Assessment:** Autonomous Computational Limnology Engine for deep learning-driven Trophic Diatom Index (TDI) estimation from microscopy images, closed-form Weight-Space Surgery, and empirical error damping across 294 natural river assemblages. An end-to-end, edge-deployable deep learning pipeline that directly estimates the Kelly & Whitton (1995) **Trophic Diatom Index (TDI)** and Water Framework Directive (WFD) water quality classes from raw light microscopy images and smartphone eyepiece photographs in under 11 seconds. Crafted in Spain 🇪🇸.
+> **AI for Water Purity Assessment:** a computational limnology engine that classifies benthic diatom frustules from microscopy images (101 taxa, EfficientNet-B3) and aggregates them into the Kelly & Whitton (1995) **Trophic Diatom Index (TDI)** with Water Framework Directive quality classes. Runs fully offline on a laptop or a phone-sized image, no cloud. Crafted in Spain 🇪🇸.
+
+---
+
+## ⚠️ Status: audited, corrected, and honest about what is not yet proven
+
+This repository was audited end-to-end on 2026-11-14. The classifier and the per-taxon
+table are real and reproduce; the *reported ecological metrics were not*. Everything below
+is the measured truth after the corrections, with the raw artifacts linked.
+
+| Claim in the previous README | Reality (measured) |
+| :--- | :--- |
+| Surgical model 78.29%, +29 cells, MAE 0.1020, r 0.9705 | The shipped `best_edited.pt` scores **78.16%**; the report was silently the **baseline** cache (`reports/validacion_tdi.json` reproduced base-without-prior exactly) |
+| 90.14% exact band agreement, 99.32% within 1 | With the correct index: **83.33%** exact (245/294), **98.64%** within 1 (290/294) |
+| TDI error 0.004 over 3.435 | The index formula itself was wrong (no `v` weight, ×10 scale, non-standard bands). Corrected below |
+| "294 natural river sampling sites" | 294 **slides/treatments** (`NH4Cl`, `DW`, `Naphrax` preparations) of 7,375 cutouts |
+| 97.33% ensemble / 93.80% TTA | **No checkpoint, no code, no artifact** in this repository — removed |
+| 60.41% "UDE baseline" | That number is the **OOD-detection accuracy** of DS50 in Table 3 of the UDE paper, not a 101-class classifier |
+| 11.2 s for 12 MP, 800 windows | 800 windows covered only the **top-left 42.5%** of a 12 MP frame. Now the grid spans edge to edge: 1,118 windows, **15.5 s** |
+
+The audit trail is reproducible: `code/test_tdi.py` (70 checks), `code/validate_tdi.py`,
+`code/audit_leakage.py`, `reports/validacion_tdi.json`, `reports/auditoria_fuga.json`.
 
 ---
 
 ## 🔬 Conceptual Overview
 
 ### Why Benthic Diatoms?
-Benthic diatoms (unicellular siliceous algae of the class *Bacillariophyceae*) are premier bioindicators mandated by international regulatory frameworks, most notably the **European Water Framework Directive (2000/60/EC)**. Due to narrow, species-specific tolerances to nutrient concentrations (phosphorus, nitrogen, organic pollution, and pH), their community composition reflects integrated river water quality over weeks and months.
+Benthic diatoms (unicellular siliceous algae of the class *Bacillariophyceae*) are premier
+bioindicators mandated by the **European Water Framework Directive (2000/60/EC)**. Their
+species-specific tolerances to nutrients, organic pollution and pH make community
+composition an integrated measure of river water quality over weeks to months.
 
 ### The Operational Bottleneck
-Traditional diatom assessment is severely bottlenecked:
-1. **Labor-Intensive Counting:** Requires chemical digestion (hot acid/peroxide), mounting in high-refractive-index media (Naphrax), and manually enumerating 300–500 frustules per slide under 1000× oil immersion microscopy (2–4 hours per sample).
-2. **Contracting Expert Pool:** Global defunding and retirement of professional classical alpha-taxonomists.
-3. **The Software Gap:** Commercial and academic tools (such as OMNIDIA, DARLEQ3, and DiaThor) are downstream calculators that require humans to manually count and enter species vectors. Until now, no pipeline closed the loop from raw field microscopy to ecological index verification.
+1. **Labour:** acid/peroxide digestion, mounting in Naphrax, and manually counting 300–500
+   frustules per slide at 1000× oil immersion (2–4 h per sample).
+2. **Taxonomist scarcity:** the expert pool is retiring faster than it is replaced.
+3. **The software gap:** OMNIDIA, DARLEQ3 and DiaThor are downstream calculators — a human
+   still has to count and type the species vector.
 
-### What This Work Achieves
-* **End-to-End Autonomous Pipeline:** Takes raw unsegmented micrographs or 12 MP smartphone photos taken through microscope eyepieces, locates frustules via budget-aware sliding windows with dual-stage NMS, classifies 101 taxa via fine-tuned and surgically optimized **EfficientNet-B3**, and computes abundance-weighted TDI scores.
-* **Closed-Form Weight-Space Surgery:** Eliminates non-biological detritus false alarms via analytical null-space projection ($\mathbf{W} \leftarrow \mathbf{W} - (\mathbf{W}\hat{\mathbf{v}})\hat{\mathbf{v}}^T$) and prototype margin expansion without gradient descent.
-* **Biological Morphometric Gating & Bayesian Risk Decisions:** Enforces empirical aspect-ratio constraints and cost-sensitive Bayesian loss minimizing expected trophic error.
-* **Empirical Proof of Statistical Error Damping:** Evaluated across **294 natural river sampling sites** (7,375 field specimens) from the *UDE Diatoms in the Wild 2024* sealed benchmark. We demonstrate that single-cell classification error cancels out during ecological aggregation:
-  * Whole-dataset TDI error is **0.004** (3.435 ground truth vs. 3.431 predicted).
-  * Pearson correlation $r = \mathbf{0.9705}$, Spearman $\rho = \mathbf{0.9661}$, $R^2 = \mathbf{0.9415}$.
-  * Mean Absolute Error (MAE) reaches a historic minimum of **0.1020**.
-  * **90.14% exact 5-tier WFD ecological quality band preservation** (265/294 sites) and **99.32% within $\le 1$ adjacent band**.
-* **Correction of Critical Ecological Trap:** Exposes and resolves the widely confused `tdi_s` vs. `tdi_v` column ambiguity in `diathor` and enforces mathematical isolation of planktonic taxa to prevent benthic index corruption.
+### What This Work Does
+* **Raw image → index:** budget-aware sliding windows + three-stage de-duplication (class-wise
+  NMS → fragment merge → cross-class NMS) locate frustules in an unsegmented micrograph,
+  EfficientNet-B3 classifies each one, and the abundance-weighted index is computed from
+  published per-taxon values.
+* **The index is the published one.** `TDI = 25·Σ(aᵢ·sᵢ·vᵢ)/Σ(aᵢ·vᵢ) − 25`, exactly as in
+  `diathor::tdi` (Kelly & Whitton 1995), with bands `<35 / 35–50 / 50–65 / 65–85 / ≥85`.
+* **Planktonic taxa are excluded** from the index and reported separately
+  (`planktonic_fraction`): the TDI is defined on the benthic fraction.
+* **Nothing is hidden:** taxa without a published `s` or `v` carry no weight, and the app
+  reports `value_mass` — how much of the counted biomass the index actually represents
+  (78.3% on the UDE test set).
 
 ---
 
 ## ⚡ Quickstart: Run in 1 Click
 
-### Option A: The Universal Single-File Engine (`zar_manah_diatom_tdi.pyz`)
-A single, self-contained executable file containing the entire model (125 MB), local server, web interface, and TDI tables:
+### Option A: The universal single-file engine (`zar_manah_diatom_tdi.pyz`)
+One self-contained file with the checkpoint, the table, the server and the UI:
 ```bash
-# macOS / Linux
-python3 zar_manah_diatom_tdi.pyz
-
-# Windows
-python zar_manah_diatom_tdi.pyz
-
-# Android (Termux)
-python zar_manah_diatom_tdi.pyz
+python3 zar_manah_diatom_tdi.pyz      # macOS / Linux / Android (Termux)
+python  zar_manah_diatom_tdi.pyz      # Windows
 ```
-* On macOS, you can also double-click `zar_manah_diatom_tdi.command`.
-* Automatically launches the local web browser at `http://127.0.0.1:8765`.
-* Automatically installs any missing dependencies silently on first run.
-* Auto-terminates the local process when the browser window is closed.
+* Opens `http://127.0.0.1:8765`; installs missing dependencies on first run.
+* The bundled `tdi.py` is byte-identical to `code/tdi.py` — the app cannot compute a
+  different index than the tests. `BUILD.json` inside the zip lists the SHA-256 of every
+  asset, so you can verify which checkpoint you are running.
 
-### Option B: Native macOS App (`Diatomeas.app`)
-Double-click `Diatomeas.app` on macOS. Runs in an isolated, dark-themed native window with hardware acceleration.
+### Option B: Native macOS app (`Diatomeas.app`)
+Double-click. Isolated dark-themed window, hardware accelerated.
 
 ### Option C: Python CLI
 ```bash
 python3 code/tdi.py --image path/to/sample.png --window 150 --conf 0.48
+python3 code/tdi.py --image photo.jpg --json          # machine-readable
 ```
 
 ---
 
-## 📊 Benchmark & Validation Results
+## 📊 Measured results
 
-### 1. Classification Accuracy (UDE Diatoms in the Wild 2024 Benchmark)
-| Model / Framework | Classes | Top-1 Accuracy | Top-5 Accuracy | Limnological Gate | Gate Outcome |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| UDE Baseline (Venkataramanan et al. 2024) | 101 | 60.41% | - | N/A | Baseline |
-| Published Literature SOTA (ResNet-50) | 101 | 69.00% | 88.50% | N/A | Prior Art |
-| EfficientNet-B0 (Phase 1) | 101 | 76.01% | 95.82% | $\ge 75.0\%$ | PASS (+15.60 pp) |
-| EfficientNet-B3 Baseline (`best.pt`) | 101 | 77.90% | 96.98% | $\ge 75.0\%$ | PASS (+17.49 pp) |
-| **EfficientNet-B3 Surgical (`best_edited.pt`)** | **101** | **78.16%** | **96.81%** | $\ge 75.0\%$ | **PASS (+17.75 pp)** |
-| **Surgical + Morphometric Prior + Bayesian Cost** | **101** | **78.29%** | **96.84%** | $\ge 75.0\%$ | **PASS (+17.88 pp)** |
-| Multi-Scale Test-Time Augmentation (TTA) | 101 | 93.80% | 98.45% | $\ge 75.0\%$ | **PASS (+33.39 pp)** |
-| **Dual-Architecture Ensemble (B3 + B0)** | **101** | **97.33%** | **99.62%** | $\ge 75.0\%$ | **PASS (+36.92 pp)** |
+### 1. Single-cell classification (UDE *Diatoms in the Wild 2024*, 101 classes, 7,375 test cutouts)
 
-### 2. Ecological Site-Level Validation (294 Natural River Assemblages)
-| Validation Metric | Baseline Model (`best.pt`) | Surgical Model (`best_edited.pt`) | Limnological Significance |
-| :--- | :---: | :---: | :--- |
-| **Sites Evaluated** | 294 river reaches | 294 river reaches | Reconstructed natural catchments across Germany |
-| **Field Cutouts** | 7,375 | 7,375 | Cryptographically sealed test split (`b6a0cb94...`) |
-| **Top-1 Classification Accuracy** | 77.90% | **78.29%** | $+0.39\%$ improvement (+29 correct frustules) |
-| **Dataset True TDI** | **3.435** | **3.435** | Ground-truth human taxonomist index |
-| **Dataset Predicted TDI** | **3.433** | **3.431** | Autonomous model prediction |
-| **Net Aggregate Error** | $\mathbf{-0.002}$ | $\mathbf{-0.004}$ | **Near-zero systemic bias** |
-| **Pearson Correlation ($r$)** | $\mathbf{0.9703}$ | $\mathbf{0.9705}$ | Near-perfect linear tracking ($p < 10^{-15}$) |
-| **Spearman Rank ($\rho$)** | $\mathbf{0.9658}$ | $\mathbf{0.9661}$ | Monotonic ordering preserved ($p < 10^{-15}$) |
-| **Mean Absolute Error (MAE)**| **0.1037** | **0.1020** | **Historic minimum** ($5\times$ smaller than band width) |
-| **Exact 5-Tier WFD Agreement**| **90.14%** (265/294) | **90.14%** (265/294) | 9 out of 10 sites receive identical legal status |
-| **Agreement within $\le 1$ Class**| **99.32%** (292/294) | **99.32%** (292/294) | Only 2 sites deviate by $> 1$ adjacent class |
-| **Mineral Detritus False Alarms**| Moderate | **0.00%** | Fully suppressed via null-space projection |
+| Model | Top-1 | Note |
+| :--- | :---: | :--- |
+| EfficientNet-B0 (phase 1) | 76.01% | reported by the training logs, not re-run here |
+| EfficientNet-B3 `best.pt` | **77.90%** | re-run from scratch, `sha 8d4fd7c6…` |
+| EfficientNet-B3 `best_edited.pt` (shipped) | **78.16%** | re-run from scratch, `sha 0557c765…` |
 
-### 3. Inference Latency (Commodity Edge Hardware)
-| Input Modality | Image Size | Windows Scanned | Wall-Clock Latency |
-| :--- | :--- | :---: | :---: |
-| Single Pre-Cropped Cell | $300 \times 300\text{ px}$ | 1 | **15.2 ms** |
-| Standard Micrograph | $1600 \times 1200\text{ px}$ | 280 | **7.1 s** |
-| Smartphone Eyepiece Photo | $4000 \times 3000\text{ px}$ (12 MP) | 800 (budget capped) | **11.2 s** |
+The two checkpoints are the same training run (`epoch=28`, `best_acc=78.0067`,
+`split_hash=b6a0cb94…`); they differ only in `classifier.weight/bias` (`max|Δ| ≈ 0.147`),
+which is why the "surgical" gain is +0.26 pp and not +0.39 pp.
+
+**This number is optimistic.** `state/split_f1.json` was built by shuffling *cutout*
+filenames, so a photomicrograph can appear in train and test:
+
+* 3,364 of 7,375 test cutouts (**45.61%**) come from a micrograph that is also in train;
+* 294 of 294 test slides appear in train;
+* accuracy on those cells is **80.98%** vs **75.79%** on genuinely unseen micrographs —
+  a **+5.18 pp** inflation (`reports/auditoria_fuga.json`).
+
+`state/split_grouped.json` (`hash 31d7ad2280c818b4`) fixes this: slides are grouped, so
+**0 slides are shared** between train and test (train 59,184 / val 7,528 / test 7,482;
+5 classes lose test coverage, 15 have <5 test cells). **The shipped checkpoints were trained
+on the leaky split and cannot be honestly evaluated on the grouped one — retraining is
+required before any generalisation claim.** The training entry point accepts that split
+unchanged; the honest number will be published with the retrained weights.
+
+### 2. Index accuracy at slide level (corrected Kelly & Whitton formula, 294 slides)
+
+| Metric | `best.pt` | `best_edited.pt` (shipped) |
+| :--- | :---: | :---: |
+| Test cutouts | 7,375 | 7,375 |
+| Whole-set TDI, true (0–100) | 54.4 | 54.4 |
+| Whole-set TDI, predicted (0–100) | 53.8 | 53.8 |
+| Whole-set raw TDI (1–5), true | 3.1746 | 3.1746 |
+| Whole-set raw TDI (1–5), predicted | 3.1525 | 3.1533 |
+| Mean absolute error (raw) | 0.1249 | **0.1255** |
+| RMSE (raw) | 0.2286 | 0.2334 |
+| Pearson `r` | **0.9681** | 0.9665 |
+| Spearman `ρ` | 0.9692 | 0.9667 |
+| Exact 5-tier band | 245/294 (**83.33%**) | 245/294 (**83.33%**) |
+| Within ±1 band | 291/294 (**98.98%**) | 290/294 (**98.64%**) |
+| Slides biased up / down | 93 / 107 | 99 / 107 |
+
+`value_mass` on the whole test set is **78.3%** and the planktonic share **11.0%** — both are
+reported by the app, because an index computed over 78% of the counted biomass is not the
+same claim as an index over all of it.
+
+Note the reachable range: no benthic taxon in this 101-class set has `s = 1` (only the
+planktonic *Thalassiosira* does), so the lowest reachable value is `s = 2` → index 25, not 0.
+
+### 3. Latency (Apple M4, PyTorch MPS)
+
+| Input | Windows | Stride | Wall clock |
+| :--- | :---: | :---: | :---: |
+| `app/sample.png` (902×948) | 121 | 75 px (dense) | **2.5 s** |
+| 5000×3000 field frame | 1,118 | 114 px (full frame) | **15.5 s** |
+
+Measured with `python3 code/tdi.py --image …` on Apple M4 / MPS, default budget of 1,200
+windows. The 12 MP figure is the sweep itself (synthetic frame, 0 detections): it is dominated
+by window classification, not I/O. The window budget widens the stride instead of truncating
+the frame, and both CLI and app report `sweep.covers_full_frame` / `sweep.dense_grid`, so a
+sparse grid is never passed off as a full sweep.
 
 ---
 
-## 📐 Mathematical Formulation of Error Damping
+## 📐 The index, exactly as implemented
 
-The Kelly & Whitton (1995) Trophic Diatom Index is:
+```
+TDI_raw = Σ(aᵢ · sᵢ · vᵢ) / Σ(aᵢ · vᵢ)        # 1..5
+TDI_100 = 25 · TDI_raw − 25                    # 0..100
+```
 
-$$\text{TDI} = \frac{\sum_{i=1}^{K} s_i \cdot N_i}{\sum_{i=1}^{K} N_i}$$
+* `aᵢ` counted abundance, `sᵢ` sensitivity 1–5, `vᵢ` indicator weight 1–3.
+* Bands on the 0–100 form: `<35` Excellent, `35–50` Good, `50–65` Fair, `65–85` Poor, `≥85` Bad.
+* Planktonic genera (`Aulacoseira`, `Conticribra`, `Cyclostephanos`, `Cyclotella`,
+  `Discostella`, `Lindavia`, `Melosira`, `Pantocsekiella`, `Skeletonema`, `Stephanocyclus`,
+  `Stephanodiscus`, `Thalassiosira`) are excluded from numerator **and** denominator.
+* `v` comes from the `tdi_v` column of the CRAN package `diathor` (Kelly & Whitton 1995);
+  74 of 101 taxa carry both `s` and `v`, and `s` matches `diathor$tdi_s` with **0 mismatches**.
 
-where $s_i \in [1, 5]$ is taxon ecological sensitivity and $N_i$ is counted abundance.
-
-Under an imperfect classifier with confusion matrix $\mathbf{C}$, the expected net ecological bias $\Delta \text{TDI}$ is:
-
-$$\mathbb{E}[\Delta \text{TDI}] = \sum_{j=1}^{K} p_j^* \left[ \sum_{i \neq j} C_{ij} (s_i - s_j) \right]$$
-
-1. **Intra-Guild Invariance:** Closely related sister species (e.g. within *Navicula* or *Nitzschia*) that confuse neural networks inhabit identical ecological niches ($s_i = s_j$). Consequently, $(s_i - s_j) = 0$, contributing **zero net error** to the ecological verdict.
-2. **Symmetric Error Cancellation:** Misclassifications across differing trophic guilds are symmetrically distributed ($89$ sites positive bias vs. $102$ sites negative bias), balancing each other out during abundance-weighted summation.
+Why the previous version was wrong: it used `Σ(a·s)/Σa` (no `v`), multiplied by 10, cut the
+bands at 2/3/4/4.5 on the raw scale, and folded planktonic cells into the benthic average.
 
 ---
 
-## 📦 Model Checkpoints & Data Availability
+## 🔁 Reproducing everything
 
-Neural weights and reproducible artifacts are available via GitHub Releases and Zenodo:
-- **Champion Model (Surgically Optimized):** `checkpoints/f2_edited/best_edited.pt` (SHA-256: `0557c7655159532f597ceb14c530f8c767a8b717bd80026a8f042b7d87eedd94`)
-- **Detritus Noise Signature Vector:** `checkpoints/f2_edited/detritus_vector.pt`
-- **Biological Morphometric Priors:** `data/morphometric_prior_101.json`
-- **Baseline Model:** `checkpoints/f2/best.pt` (SHA-256: `8d4fd7c61b6a1e11f329847db902830bee8623862f53d7a521ebe6943f7676c1`)
-- **Repository:** [github.com/Zar-Manah/diatom-tdi](https://github.com/Zar-Manah/diatom-tdi)
+```bash
+make check          # 70 unit checks + 50 artifact-consistency checks (~10 s)
+make all            # regenerate every number, rebuild the engine, verify it
+
+# or step by step
+python3 code/test_tdi.py                                  # 70 checks, no checkpoint needed
+python3 code/check_artifacts.py                           # pyz/.app/reports vs sources
+python3 code/validate_tdi.py                              # shipped ckpt -> reports/validacion_tdi.json
+python3 code/validate_tdi.py --ckpt checkpoints/f2/best.pt
+python3 code/audit_leakage.py --ckpt checkpoints/f2_edited/best_edited.pt \
+                             --ckpt checkpoints/f2/best.pt   # -> reports/auditoria_fuga.json
+python3 code/build_split_grouped.py                       # -> state/split_grouped.json
+python3 code/build_pyz.py                                 # -> zar_manah_diatom_tdi.pyz
+```
+
+`check_artifacts.py` exists because this repository shipped three drift bugs at once: the `.pyz` and the
+`.app` bundle embedded older copies of the engine, and the validation report belonged to a different
+checkpoint. The gate fails if any of that happens again — it compares the zip members byte for byte with
+`code/tdi.py`, checks the app bundle, and verifies that every report carries the SHA-256 of the shipped
+checkpoint and the hash of the split it was measured on.
+
+`paper/MANUSCRIPT.md` and `paper/manuscript.tex` carry the corrections and the current numbers.
+The old PDF was removed because it predated the audit; regenerate it from the `.tex` with a LaTeX
+toolchain if a PDF is needed.
+
+Predictions are cached per checkpoint **SHA-256**, and validation aborts if the checkpoint's
+`split_hash` or class order does not match the split. That guard exists because a stale cache
+from another checkpoint is precisely how the original report ended up labelled "surgical".
+
+---
+
+## 📦 Checkpoints & artifacts
+
+| Artifact | SHA-256 |
+| :--- | :--- |
+| `checkpoints/f2_edited/best_edited.pt` (shipped) | `0557c7655159532f597ceb14c530f8c767a8b717bd80026a8f042b7d87eedd94` |
+| `checkpoints/f2/best.pt` (baseline) | `8d4fd7c61b6a1e11f329847db902830bee8623862f53d7a521ebe6943f7676c1` |
+| `checkpoints/f1/best.pt` | `53d2c1a7…d52ef540` |
+| `data/tdi_values_101.csv` | see `BUILD.json` inside the `.pyz` |
+| `state/split_f1.json` (random, used for training) | `b6a0cb94…` |
+| `state/split_grouped.json` (slide-grouped, for retraining) | `31d7ad2280c818b4` |
+
+No public DOI is assigned to this version yet. The previous Zenodo record was withdrawn and
+must not be cited; the numbers in it are the superseded ones. A new record with the corrected
+numbers, the audit report and `split_grouped.json` will replace it.
 
 ---
 
 ## 🔒 Privacy & Data Sovereignty
-* **100% Offline Execution:** Runs locally on your device (GPU/MPS or CPU).
-* **Zero Cloud Telemetry:** No images, coordinates, or data ever leave your machine.
-* **Open Source & Auditable:** All code, weights, and validation scripts are fully open.
+* **100% offline:** local MPS/CUDA/CPU inference, no telemetry, no uploads.
+* **Auditable:** every number in this README is produced by a script in `code/`.
 
 ---
 
-## 👤 Author & Affiliation
+## 👤 Author
 * **Author:** Zar Manah
-* **Affiliation:** Independent Researcher
-* **Correspondence:** GitHub issues
+* **Affiliation:** Independent Researcher, Madrid, Spain
+* **ORCID:** [0009-0007-8443-8999](https://orcid.org/0009-0007-8443-8999)
 
 ---
 
 ## 📖 Citation
 
-If you use this software or empirical error damping findings in your research, please cite:
-
 ```bibtex
-@article{manah2026bridging,
-  title={Bridging Computer Vision and Freshwater Biomonitoring: Deep Learning-Driven Trophic Diatom Index Estimation, Closed-Form Weight-Space Surgery, and Empirical Error Damping Across 294 Natural River Assemblages},
+@software{manah2026diatomtdi,
+  title={Diatom-TDI: benthic diatom classification and Trophic Diatom Index estimation from microscopy images},
   author={Manah, Zar},
-  affiliation={Independent Researcher},
-  journal={Zenodo Preprints},
   year={2026},
-  url={https://github.com/Zar-Manah/diatom-tdi}
+  note={Version with corrected Kelly \& Whitton index; see reports/validacion_tdi.json and reports/auditoria_fuga.json}
 }
 ```
 

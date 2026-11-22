@@ -1,18 +1,75 @@
-# Bridging Computer Vision and Freshwater Biomonitoring: Deep Learning-Driven Trophic Diatom Index Estimation, Closed-Form Weight-Space Surgery, and Empirical Error Damping Across 294 Natural River Assemblages
+# Bridging Computer Vision and Freshwater Biomonitoring: Deep Learning-Driven Trophic Diatom Index Estimation, Closed-Form Weight-Space Surgery, and Empirical Error Damping Across 294 Slide Groups of a Field Benchmark
 
-**Zar Manah** $^{1,*}$
+**Zar Manah** $^{1}$
 
-$^{1}$ Independent Researcher  
-$^*$ Corresponding author: GitHub issues
+$^{1}$ Independent Researcher, Madrid, Spain
+
+**ORCID:** [0009-0007-8443-8999](https://orcid.org/0009-0007-8443-8999)
+
+---
+
+> ## ⚠️ Corrections of 2026-11-14 — read before citing
+>
+> This manuscript was audited line by line against the repository artifacts. The classifier and the
+> per-taxon table reproduce; **several of the ecological numbers in the text below did not**, and the
+> index formula itself was not the published one. Everything that follows from §4 onward must be read
+> through this box. The old `MANUSCRIPT.pdf` predated these corrections and has been removed; the `.tex` was rewritten to match this file.
+>
+> **What was wrong**
+>
+> 1. **Index formula.** The code computed `Σ(a·s)/Σa` and multiplied by 10, with bands at 2/3/4/4.5 on
+>    the raw scale, and folded planktonic cells into the benthic average. The published index is
+>    `TDI = 25·Σ(a·s·v)/Σ(a·v) − 25` with bands at 35/50/65/85 (Kelly & Whitton 1995; `diathor::tdi`).
+>    The per-taxon indicator weight `v` was missing entirely.
+> 2. **Mislabelled validation.** `reports/validacion_tdi.json` was described as the surgical model but
+>    reproduced the **baseline** prediction cache exactly (7,375/7,375 identical labels). The "surgical"
+>    row (78.29%, +29 cells, MAE 0.1020, r 0.9705) is produced by no artifact in the repository.
+> 3. **Test-set tuning.** The champion was selected by a 168-configuration grid search scored on the test
+>    set (`vws_grid_search.py`), so the test set is not held out for model selection.
+> 4. **Split leakage.** `build_split.py` shuffled *cutout filenames*: 3,364 of 7,375 test cutouts (45.61%)
+>    are crops of a micrograph that is also in train, and 294 of 294 test slides appear in train.
+>    Accuracy is 80.98% on those cells vs 75.79% on unseen micrographs (+5.18 pp inflation).
+> 5. **Unsupported claims.** The 97.33% ensemble, the 93.80% TTA, the 78.29% "surgical + morphometric prior
+>    + Bayesian cost" row and the 0.00% detritus false-alarm rate have **no checkpoint and no code** in the
+>    repository. The "60.41% UDE baseline" is the OOD-detection accuracy of DS50 from Table 3 of the UDE
+>    paper, not a 101-class classifier. The "294 natural river sampling sites" are 294 **slides/treatments**
+>    (`NH4Cl`, `DW`, `Naphrax`) of the benchmark.
+> 6. **Sweep truncation.** The 800-window budget stopped at the top-left corner: on a 12 MP frame it covered
+>    42.5% of the height. The grid now spans edge to edge (1,118 windows) at 15.5 s, not 11.2 s.
+>
+> **What is measured now** (`reports/validacion_tdi.json`, `reports/auditoria_fuga.json`)
+>
+> | Quantity | Baseline `best.pt` | Shipped `best_edited.pt` |
+> | :--- | :---: | :---: |
+> | Top-1, random split | 77.90% | **78.16%** |
+> | Top-1, micrograph unseen in train | 75.59% | 75.79% |
+> | Whole-set raw TDI (true) | 3.1746 | 3.1746 |
+> | Whole-set raw TDI (predicted) | 3.1525 | 3.1533 |
+> | Whole-set index, 0–100 (true / pred) | 54.4 / 53.8 | 54.4 / 53.8 |
+> | MAE (raw, 1–5 scale) | 0.1249 | 0.1255 |
+> | Pearson `r` / Spearman `ρ` | 0.9681 / 0.9692 | 0.9665 / 0.9667 |
+> | Exact 5-tier band | 245/294 (83.33%) | 245/294 (83.33%) |
+> | Within ±1 band | 291/294 (98.98%) | 290/294 (98.64%) |
+> | Slides biased up / down / tied | 93 / 107 / 94 | 99 / 107 / 88 |
+> | `value_mass` / planktonic share | 78.3% / 11.0% | 78.3% / 11.0% |
+>
+> The qualitative conclusion of the paper survives — aggregation damps single-cell error, and ~83% of
+> slides keep their exact quality band — but the effect is **smaller** than previously reported and it is
+> measured on a **leaky split**. `state/split_grouped.json` (slide-grouped, 0 shared slides, hash
+> `31d7ad2280c818b4`) is the split that must be used; the shipped checkpoints were trained on the leaky
+> one and therefore **cannot be honestly evaluated on it**. A retrained checkpoint is required before any
+> generalisation claim, and every number above must then be re-measured.
+>
+> Reproduce: `python3 code/test_tdi.py` (70 checks) · `code/validate_tdi.py` · `code/audit_leakage.py`.
 
 ---
 
 ### Abstract
 Biomonitoring of freshwater ecosystems under regulatory directives (such as the EU Water Framework Directive 2000/60/EC) relies heavily on benthic diatom assemblages to quantify eutrophication via standardized metrics like the Trophic Diatom Index (TDI). However, routine assessment faces a severe operational bottleneck: manual identification and counting of silica frustules via light microscopy is labor-intensive, operator-dependent, and constrained by a global shortage of expert taxonomists. While recent deep learning benchmarks have achieved promising classification on isolated, pre-segmented diatom cutouts, computer vision models have remained isolated from ecological monitoring frameworks. No prior study has closed the loop from raw microscopy imagery to ecological status verifications or empirically characterized how neural classification uncertainty propagates into biological index variance. 
 
-Here, we present an end-to-end, open-source *in silico* computational pipeline that directly infers the Kelly & Whitton (1995) Trophic Diatom Index from raw light microscopy images and smartphone-captured eyepiece photographs, rigorously testing the foundational hypothesis that single-cell neural classification variance dampens during ecological aggregation for preclinical and regulatory environmental biomonitoring. Trained on the sealed 101-taxa benchmark of the *UDE Diatoms in the Wild 2024* dataset ($N = 74,194$ images), our fine-tuned EfficientNet-B3 model achieves $77.90\%$ baseline top-1 test accuracy (+17.5 percentage points above published benchmarks). We then pioneer **closed-form Weight-Space Surgery**—coupling orthogonal null-space projection for mineral detritus suppression, hyperdimensional prototype margin expansion, and a biological morphometric aspect-ratio prior—elevating single-model accuracy to **$78.29\%$** (+29 net verified test specimens) and reducing the mean absolute error (MAE) across 294 natural river assemblages to a historic minimum of **$0.1020$** ($R^2 = 0.9415$, whole-test TDI error merely $\mathbf{0.004}$). Furthermore, under multi-scale Test-Time Augmentation (TTA) and dual-architecture ensembling (EfficientNet-B3 + B0), the pipeline achieves **$97.33\%$** field classification accuracy.
+Here, we present an end-to-end, open-source *in silico* computational pipeline that infers the Kelly & Whitton (1995) Trophic Diatom Index from raw light microscopy images, and we test the hypothesis that single-cell classification error damps during ecological aggregation. Trained on the 101-taxon *UDE Diatoms in the Wild 2024* benchmark ($N = 74{,}194$ cutouts), a fine-tuned EfficientNet-B3 reaches $77.90\%$ top-1 on the hash-locked test split, and a closed-form edit of the classifier head raises it to $78.16\%$ without gradient descent. **That split leaks**: 45.61\% of test cutouts are crops of a micrograph also present in train, and accuracy on genuinely unseen micrographs is $75.79\%$ — the clean generalisation number requires retraining on the slide-grouped split we release here. Using the published index ($25\cdot\sum a s v/\sum a v-25$), the whole test set yields $54.4$ (0–100) against $53.8$ predicted (raw $3.1746$ vs $3.1533$), with group-level Pearson $r = 0.9665$, MAE $0.1255$ on the 1–5 scale, exact 5-tier band agreement in $245/294$ slides ($83.33\%$) and $290/294$ within one band ($98.64\%$). A complete 12 MP frame is swept edge to edge (1,118 windows) in $15.5$ s on Apple M4. We report the earlier ensemble/TTA figures as withdrawn: no checkpoint or code for them exists.
 
-Crucially, by evaluating our pipeline across 294 real river sampling sites ($7,375$ validated field specimens), we reveal an **empirical error damping phenomenon**: despite a $\sim 21.7\%$ classification error at the single-cell level, individual errors are symmetrically distributed across ecological tolerance guilds ($89$ sites positive bias vs. $102$ sites negative bias), cancelling out during abundance-weighted aggregation. The overall test-set TDI error is merely $\mathbf{0.004}$ ($3.435$ ground truth vs. $3.431$ predicted). Across all 294 natural river sites, the predicted index exhibits an exceptional correlation with human-annotated ground truth (Pearson $r = \mathbf{0.9705}$, Spearman $\rho = \mathbf{0.9661}$, $R^2 = \mathbf{0.9415}$) and a mean absolute error of $\mathbf{0.1020}$ on the 1–5 scale. Consequently, the 5-tier ecological water quality status is preserved with $\mathbf{90.14\%}$ exact agreement ($265/294$ sites) and $\mathbf{99.32\%}$ within $\le 1$ adjacent class ($292/294$ sites). Furthermore, we provide a zero-dependency, edge-deployable application suite capable of analyzing complete 12 MP smartphone eyepiece captures in $11.2$ seconds completely offline on commodity hardware. This work demonstrates that single-cell perfection is unnecessary for robust ecological assessment, bridging the gap between computer vision and statutory freshwater management.
+Crucially, by evaluating our pipeline across the 294 slide/treatment groups of the benchmark ($7,375$ field cutouts), we observe an **empirical error damping phenomenon**: despite a $\sim 21.8\%$ classification error at the single-cell level, individual errors are symmetrically distributed across ecological tolerance guilds ($99$ slide groups shift up, $107$ down and $88$ are exactly unchanged), cancelling out during abundance-weighted aggregation. The whole-test raw TDI is $3.1746$ true vs. $3.1533$ predicted. Across the 294 groups the predicted index tracks human counts with Pearson $r = \mathbf{0.9665}$ (Spearman $\rho = 0.9667$, $R^2 = 0.9341$) and a mean absolute error of $\mathbf{0.1255}$ on the 1–5 scale. Consequently the 5-tier quality band is preserved exactly in $\mathbf{83.33\%}$ of groups ($245/294$) and within one band in $\mathbf{98.64\%}$ ($290/294$). Finally, we provide a zero-dependency, edge-deployable application that sweeps a complete 12 MP frame edge to edge (1,118 windows) in $15.5$ s, fully offline on commodity hardware. This work demonstrates that single-cell perfection is unnecessary for robust ecological assessment, bridging the gap between computer vision and statutory freshwater management.
 
 **Keywords:** Diatoms, Trophic Diatom Index (TDI), Deep Learning, Water Quality Monitoring, Weight-Space Surgery, Error Propagation, Error Damping, Morphometric Priors, EfficientNet, Edge Computing.
 
@@ -38,9 +95,9 @@ However, an acute scientific and practical gap persists in the literature:
 To resolve these foundational challenges, this study presents:
 - **Pioneering Closed-Form Weight-Space Surgery for Computer Vision:** We demonstrate that deep convolutional neural networks can be surgically altered without gradient descent or retraining. By calculating the 1536-dimensional latent signature of mineral detritus via SVD, we project the classifier weight matrix into the orthogonal null-space of debris ($\mathbf{W} \leftarrow \mathbf{W} - (\mathbf{W}\hat{\mathbf{v}})\hat{\mathbf{v}}^T$), rendering the classifier mathematically immune to mineral dust while expanding hyperdimensional margins between morphologically entangled taxa.
 - **Integration of Biological Morphometric Gating and Bayesian Risk Decisions:** We integrate an empirical aspect-ratio prior that strictly penalizes physically impossible taxonomic confusions (e.g., circular centric frustules vs. elongated pennate boats) and a cost-sensitive Bayesian decision rule that directly minimizes expected trophic index variance.
-- **Empirical Proof of Statistical Error Damping:** We evaluate our pipeline across 294 natural river sampling sites from the *UDE Diatoms in the Wild* sealed benchmark ($7,375$ validated field cutouts). We provide the first rigorous empirical proof that single-cell classification errors are symmetrically distributed across trophic guilds ($89 \uparrow / 102 \downarrow$), damping out in aggregate. The whole-dataset TDI prediction error is merely $\mathbf{0.004}$ ($3.435$ true vs. $3.431$ predicted), with site-level Pearson $r = \mathbf{0.9705}$, Spearman $\rho = \mathbf{0.9661}$, and an exact 5-tier ecological quality status concordance of $\mathbf{90.14\%}$ ($265/294$ sites; $99.32\%$ within $\le 1$ adjacent band).
-- **Novel Spatial Scanning and Refinement Architecture:** We implement a scale-calibrated ($150 \text{ px}$) sliding-window mechanism with dynamic stride widening under an 800-window budget, avoiding top-left truncation bias, and integrate a dual-stage NMS with $+6\%$ bounding box contextual refinement that eliminates spurious detections on mineral detritus (raising precision from 0.71 to 0.78).
-- **Multi-Scale Invariance and Multi-Architecture Ensembling:** We incorporate Test-Time Augmentation (TTA) exploiting frustule rotational symmetry and establish a dual-architecture ensemble (EfficientNet-B3 + B0) that reaches **$97.33\%$** accuracy.
+- **Empirical Proof of Statistical Error Damping:** We evaluate our pipeline across the 294 slide/treatment groups of the *UDE Diatoms in the Wild* benchmark ($7,375$ field cutouts). We show empirically that single-cell classification errors are symmetrically distributed across trophic guilds ($99 \uparrow / 107 \downarrow / 88$ unchanged), damping out in aggregate. The whole-test raw TDI is $3.1746$ true vs. $3.1533$ predicted, with group-level Pearson $r = \mathbf{0.9665}$, Spearman $\rho = \mathbf{0.9667}$, exact 5-tier quality-band concordance of $\mathbf{83.33\%}$ ($245/294$) and $98.64\%$ within $\le 1$ band ($290/294$). These figures are measured on a split that leaks (45.61\% of test cutouts share their micrograph with train); a retrained, slide-grouped evaluation is the honest next step and the split is released for it.
+- **Novel Spatial Scanning Architecture:** We implement a scale-calibrated ($150 \text{ px}$) sliding-window mechanism with dynamic stride widening under a 1,200-window budget that spans the frame edge to edge, and a three-stage de-duplication (class-wise NMS → fragment merge → cross-class NMS). The optional $+6\%$ contextual refinement is disabled by default because it dropped valid cells. Earlier versions truncated the sweep at 800 windows, covering only the top-left 42.5\% of a 12 MP frame; that bug is fixed and the coverage is reported at inference time (`sweep.covers_full_frame`).
+- **A correction of the record:** We withdraw the previously reported TTA ($93.80\%$) and dual-architecture ensemble ($97.33\%$) figures, which have no checkpoint or code in the repository, and we report the index with its published indicator weights instead of an unweighted mean.
 - **Local Edge Inference and Commodity Deployment:** The pipeline runs in 15 ms per crop, 7 s per 1.8 MP micrograph, and 11 s per 12 MP smartphone photo on commodity edge hardware with GPU or multi-core neural acceleration, requiring zero cloud dependencies or external clusters.
 
 ---
@@ -54,28 +111,30 @@ $$\text{WMS} = \frac{\sum_{i=1}^{K} A_i \cdot s_i \cdot v_i}{\sum_{i=1}^{K} A_i 
 
 where $A_i$ is the relative abundance (percentage or count) of taxon $i$, $s_i \in [1, 5]$ is the ecological sensitivity value (where 1 indicates pure oligotrophic waters and 5 indicates severe nutrient enrichment/hypereutrophy), and $v_i \in [1, 3]$ is the indicator value representing taxonomic stenoecy (indicator reliability). 
 
-In standardized field implementations—including subsequent DARLEQ revisions and automated scoring frameworks—the abundance-weighted mean sensitivity is computed directly over all counted cells of valued benthic taxa ($v_i \approx 1$ or incorporated directly into the calibrated sensitivity score $s_i$):
+The index used in this work is exactly the weighted mean above with $N_i$ as the absolute count, plus the standard linear rescaling to 0–100 (the form in which the Kelly & Whitton bands are defined, and the form implemented by `diathor::tdi`):
 
-$$\text{TDI} = \frac{\sum_{i=1}^{K} s_i \cdot N_i}{\sum_{i=1}^{K} N_i} \tag{2}$$
+$$\text{TDI}_{\text{raw}} = \frac{\sum_{i=1}^{K} s_i \cdot v_i \cdot N_i}{\sum_{i=1}^{K} v_i \cdot N_i} \in [1, 5], \qquad \text{TDI}_{100} = 25 \cdot \text{TDI}_{\text{raw}} - 25 \in [0, 100] \tag{2}$$
 
-where $N_i$ denotes the absolute count of identified individuals belonging to taxon $i$. The resulting score resides on a continuous scale of $[1.0, 5.0]$. In regulatory literature, this value is often multiplied by 10 ($\text{TDI}_{\times 10} \in [10, 50]$) or linearly transformed to a percentage scale ($\text{TDI}_{100} = (\text{WMS} \times 25) - 25 \in [0, 100]$).
+where $N_i$ is the count of taxon $i$ and the sums run over benthic taxa only; planktonic genera are removed from numerator **and** denominator, because their abundance tracks pelagic retention time rather than benthic nutrient loading. An earlier version of this manuscript dropped $v_i$, multiplied by 10 and cut the bands on the raw scale; that is not the published index and all results here use Eq. 2.
 
-The resulting continuous index is mapped into five standardized ecological status bands under the European Water Framework Directive:
+The quality bands are defined on the 0–100 form:
 
-$$\text{Class}(\text{TDI}) = \begin{cases} 
-\text{Excellent (Oligotrophic, very good quality)}, & 1.0 \le \text{TDI} < 2.0 \\
-\text{Good (Oligotrophic, good quality)}, & 2.0 \le \text{TDI} < 3.0 \\
-\text{Fair (Mesotrophic, moderate enrichment)}, & 3.0 \le \text{TDI} < 4.0 \\
-\text{Poor (Eutrophic, high enrichment)}, & 4.0 \le \text{TDI} < 4.5 \\
-\text{Bad (Hypereutrophic, severe enrichment)}, & 4.5 \le \text{TDI} \le 5.0 
+$$\text{Class}(\text{TDI}_{100}) = \begin{cases} 
+\text{Excellent (Oligotrophic, very good quality)}, & 0 \le \text{TDI}_{100} < 35 \\
+\text{Good (Oligotrophic, good quality)}, & 35 \le \text{TDI}_{100} < 50 \\
+\text{Fair (Mesotrophic, moderate enrichment)}, & 50 \le \text{TDI}_{100} < 65 \\
+\text{Poor (Eutrophic, high enrichment)}, & 65 \le \text{TDI}_{100} < 85 \\
+\text{Bad (Hypereutrophic, severe enrichment)}, & 85 \le \text{TDI}_{100} \le 100 
 \end{cases} \tag{3}$$
+
+Note that in this 101-taxon set no benthic taxon carries $s = 1$ (only the planktonic *Thalassiosira* does), so the reachable floor of the index is $s = 2 \Rightarrow \text{TDI}_{100} = 25$.
 
 ### 2.2 Analytical Derivation of the Error Damping Phenomenon
 Let $S$ represent a natural water sample containing $N$ total identified benthic cells, distributed across $K$ taxonomic classes with true counts $\mathbf{N}^* = [N_1^*, N_2^*, \dots, N_K^*]^T$. The true sample TDI is:
 
-$$\text{TDI}^* = \frac{1}{N_{\text{val}}^*} \sum_{j=1}^{K} s_j N_j^* \tag{4}$$
+$$\text{TDI}^* = \frac{\sum_{j=1}^{K} s_j v_j N_j^*}{\sum_{j=1}^{K} v_j N_j^*} \tag{4}$$
 
-where $N_{\text{val}}^* = \sum_{j=1}^K \mathbb{I}(s_j \neq \emptyset) N_j^*$ is the total number of cells possessing published sensitivity values.
+where the denominator $\sum_j v_j N_j^*$ is the valued, weighted cell mass; taxa without a published $s$ or $v$ contribute nothing to either sum, and the share of cells they represent is reported as `value_mass`.
 
 Now consider an imperfect deep learning classifier with confusion matrix $\mathbf{C} \in [0, 1]^{K \times K}$, where entry $C_{ij} = P(\hat{Y} = i \mid Y = j)$ represents the probability that a cell of true class $j$ is predicted as class $i$. When this model processes the sample, the expected count of predicted class $i$ is:
 
@@ -83,7 +142,7 @@ $$\mathbb{E}[\hat{N}_i] = \sum_{j=1}^{K} C_{ij} N_j^* \tag{5}$$
 
 The predicted index is:
 
-$$\widehat{\text{TDI}} = \frac{1}{\hat{N}_{\text{val}}} \sum_{i=1}^{K} s_i \hat{N}_i \tag{6}$$
+$$\widehat{\text{TDI}} = \frac{\sum_{i=1}^{K} s_i v_i \hat{N}_i}{\sum_{i=1}^{K} v_i \hat{N}_i} \tag{6}$$
 
 Assuming $N_{\text{val}}^* \approx \hat{N}_{\text{val}}$ (which holds when misclassifications occur primarily between valued taxa or have symmetric unvalued leakages), the expected index error is:
 
@@ -95,23 +154,25 @@ We can decompose $\delta_j$ into diagonal (correct classification) and off-diago
 
 $$\delta_j = C_{jj} s_j + \sum_{i \neq j} C_{ij} s_i - s_j = \sum_{i \neq j} C_{ij} (s_i - s_j) \tag{8}$$
 
-Equation (8) yields three profound insights into why deep learning models succeed in biomonitoring despite imperfect classification:
+Equations (4)–(8) are written with unit weights for readability; the implemented index weights every term by $v_i$ (Eq. 2), which is equivalent to replacing $N_i$ by $v_i N_i$ throughout. The three insights below are unchanged, because sister taxa that the network confuses generally share both $s$ and $v$.
+
+Equation (8) yields three insights into why deep learning models can work in biomonitoring despite imperfect classification:
 1. **Intra-Guild Confusion Yields Zero Distortion:** If misclassifications occur predominantly between closely related taxa within the same genus (e.g., *Navicula gregaria* [$s=3$] confused with *Navicula cryptocephala* [$s=3$]), then $s_i - s_j = 0$. Consequently, **such classification errors contribute identically zero bias to the ecological index**, regardless of single-cell error rate.
 2. **Symmetric Inter-Guild Balancing:** If an oligotrophic taxon ($s=1$) is occasionally confused with a mesotrophic taxon ($s=3$, error $+2$), while another mesotrophic taxon ($s=3$) is confused with an oligotrophic taxon ($s=1$, error $-2$), the abundance-weighted summation across a multi-species assemblage causes these directional deviations to cancel out.
-3. **Finite Sample Variance Decays as $\mathcal{O}(1/N)$:** The variance of the predicted index decays inversely with the number of counted cells $N$, ensuring that for counts $\ge 300$, random classification jitter is virtually eliminated.
+3. **Finite Sample Variance Decays as $\mathcal{O}(1/N)$:** The variance of the predicted index decays roughly inversely with the number of counted cells $N$. This cuts both ways: the median benchmark group has only 23 cutouts, and the worst group in Table 3 (17 cells, $\Delta = -1.5$ raw units) shows how volatile a thin sample is. Large counting chambers are stable; small ones are not, and the app reports the count so the user can judge.
 
 ---
 
 ## 3. Materials and Methods
 
-### 3.1 Dataset and Sealed Benchmark Split
+### 3.1 Dataset and Benchmark Split
 We utilized the *UDE Diatoms in the Wild 2024* dataset [16], the largest publicly accessible expert-curated diatom image repository. The complete dataset comprises $74,194$ light microscopy images collected from freshwater river monitoring stations across Central Europe (principally Germany) by the University of Duisburg-Essen.
 
 From the full 611-taxa corpus, we selected the official benchmark subset comprising all taxa with $\ge 100$ verified specimens, yielding **101 distinct taxonomic classes**. The dataset features intense real-world challenges: specimens exhibit variable orientations, girdle vs. valve views, frustule fragmentation, obscuration by organic biofilm matrix, and variable illumination.
 
-To guarantee absolute scientific integrity and avoid data leakage, we evaluated our pipeline strictly on the official sealed test set of **7,375 images**, locked with deterministic cryptographic SHA-256 hash `b6a0cb94aab2dd544e88de5d9c0f1c81a78aa59217c3081baf125943874f898d`.
+We evaluated on the test partition of **7,375 images** defined by `state/split_f1.json` (SHA-256 `b6a0cb94aab2dd544e88de5d9c0f1c81a78aa59217c3081baf125943874f898d`). This split is hash-locked but **not leakage-free**: because it was built by shuffling cutout filenames, 45.61% of the test cutouts are crops of a micrograph that also appears in train (see the corrections box and Table 1b).
 
-By grouping the $7,375$ test cutouts by their biological sampling origin, we reconstructed **294 distinct natural river assemblages** (ranging from 10 to over 150 individual frustules per site, median $= 25$ cells/site). This reconstruction allows us to simulate real-world regulatory biomonitoring campaigns on real river samples.
+By grouping the 7,375 test cutouts by the slide/treatment token encoded in the UDE filenames, we obtain **294 groups** (1 to 133 cutouts per group, median 23). These are preparation units (`NH4Cl`-treated, distilled-water and `Naphrax` mounts) rather than 294 independent river reaches; they are the finest grouping the public filenames support, and each group still simulates a real counting chamber.
 
 ### 3.2 Taxonomic Harmonization and Curation of Ecological Indices
 To link the 101 computer vision classes to published ecological indicators, we performed an exhaustive multi-database reconciliation:
@@ -122,7 +183,7 @@ To link the 101 computer vision classes to published ecological indicators, we p
 5. **Handling of Unvalued Taxa:**
    - **Zero Values Invented:** No taxon without a published value is assigned an imputed score.
    - **Renormalization of Abundances:** Relative abundances $p_i$ are computed over the subset of valued taxa, exactly mirroring standard DARLEQ software execution.
-   - **Diagnostic Metrics:** The pipeline reports `valued_count` and `value_mass` (the percentage of identified biomass carrying valid indicator scores). Across the 294 natural river sites, the average `value_mass` is **84.45%**, confirming that the 101-class model captures the overwhelming majority of biological community structure.
+   - **Diagnostic Metrics:** The pipeline reports `valued_count` and `value_mass` (the percentage of identified biomass carrying valid indicator scores). On the whole test set `value_mass` is **78.3%**: the index covers about four fifths of the counted cells, and the app surfaces that fraction instead of hiding it.
 
 ### 3.3 Deep Neural Network Architecture and Training
 We implemented an EfficientNet-B3 convolutional neural network architecture [19] via `timm`. The model was trained with the following hyperparameters:
@@ -131,7 +192,7 @@ We implemented an EfficientNet-B3 convolutional neural network architecture [19]
 - **Optimization:** AdamW optimizer (weight decay $10^{-4}$), initial learning rate $\eta = 3 \times 10^{-4}$, cosine annealing schedule with $T_{\text{max}} = 30$ epochs and linear warm-up (3 epochs).
 - **Class Balancing:** Cross-entropy loss weighted by inverse class frequency to counter extreme natural abundance imbalances.
 
-Convergence was achieved at epoch 28 (validation accuracy $78.01\%$), generalizing to **77.90% top-1 accuracy** on the sealed test partition ($7,375$ images), surpassing the published state-of-the-art benchmark.
+Convergence was achieved at epoch 28 (validation accuracy $78.01\%$), reaching **77.90% top-1** on the test partition (7,375 images, re-inferred from scratch for this audit).
 
 ### 3.4 Closed-Form Weight-Space Surgery and Analytical Null-Space Projection
 While gradient descent fine-tuning optimizes overall empirical cross-entropy, it is computationally expensive and susceptible to catastrophic forgetting or destructive interference in frozen spatial representations. To address false alarms on non-biological debris and expand decision boundaries between entangled taxa, we developed a closed-form, gradient-free weight surgery framework (`diatom-weight-surgery`).
@@ -161,116 +222,150 @@ Taxonomic diatom classification possesses strong physical constraints that purel
 
 ### 3.6 Spatial Detection, False Positive Suppression, and Budget-Aware Sweeping
 Unlike single-cell cutout classifiers, field monitoring requires analyzing full micrographs containing multiple cells, empty space, and mineral debris. We designed a lightweight, high-precision scanning pipeline:
-1. **Calibrated Sliding-Window Sweep:** Microscopic frustules in the UDE dataset have a median diameter of $\sim 148\text{ px}$. We configured a default window size of $W = 150\text{ px}$ with a default stride of $S = 50\text{ px}$ (66% overlap).
-2. **Budget-Aware Uniform Lattice Sampling:** High-resolution micrographs (or 12 MP smartphone photos at $4000 \times 3000$) contain over 4,000 potential window positions, which would incur prohibitive runtimes ($\sim 45\text{ s}$) if naively scanned. Crucially, truncating the scan to a fixed window budget causes an insidious spatial bias: the detector only evaluates the top-left quadrant of the slide. We solved this by implementing an adaptive uniform lattice: if $N_x \times N_y > B_{\text{max}}$ (where $B_{\text{max}} = 800$), the stride step is dynamically expanded ($s \leftarrow s \times 1.15$) and window positions are distributed uniformly across the full coordinate span:
+1. **Calibrated Sliding-Window Sweep:** Microscopic frustules in the UDE dataset have a median major axis of $\sim 148\text{ px}$. We configured a default window size of $W = 150\text{ px}$ and a stride fraction of 0.50 (75 px step, 50% overlap).
+2. **Budget-Aware Uniform Lattice Sampling:** High-resolution micrographs (or 12 MP smartphone photos at $4000 \times 3000$) contain over 4,000 potential window positions, which would incur prohibitive runtimes ($\sim 45\text{ s}$) if naively scanned. Crucially, truncating the scan to a fixed window budget causes an insidious spatial bias: the detector only evaluates the top-left quadrant of the slide. We solved this by implementing an adaptive uniform lattice: if $N_x \times N_y > B_{\text{max}}$ (where $B_{\text{max}} = 1{,}200$), the stride step is dynamically expanded ($s \leftarrow s \times 1.15$) and window positions are distributed uniformly across the full coordinate span, so the last origin always touches the far border:
    $$x_i = \text{round}\left( i \cdot \frac{W_{\text{img}} - W}{N_x - 1} \right), \quad y_j = \text{round}\left( j \cdot \frac{H_{\text{img}} - W}{N_y - 1} \right)$$
-   We verified that uniform sampling down to 500 windows maintains index stability within $\pm 0.05$ TDI of dense scanning while accelerating inference $4\times$.
-3. **Dual-Stage Non-Maximum Suppression (NMS):** Extracted windows are passed through the neural classifier in batches of 64. Windows with maximum softmax probability below threshold $\tau_{\text{conf}} = 0.50$ are discarded. Overlapping detections of the same cell are clustered via spatial Intersection-over-Union (IoU) with threshold $\tau_{\text{iou}} = 0.35$.
-4. **Contextual Margin Refinement ($+6\%$):** A recurring failure mode of sliding-window classifiers on microscopy slides is firing on mineral fragments, diatom fragments, or silica detritus that partially resemble frustule costae. To eliminate these false positives, each surviving bounding box is cropped tightly with a $+6\%$ contextual border and re-inferred through the classifier. Boxes whose softmax confidence collapses below the threshold ($0.50$) are rejected. This refinement step boosted field precision from 0.71 to **0.78** on positional ground truth.
+   On a $5000 \times 3000$ frame this yields 1,118 windows at a 114 px step, i.e. the whole frame is inspected (no corner bias), and the API reports whether the grid is dense or budget-widened rather than silently truncating.
+3. **Three-Stage De-duplication:** Extracted windows are passed through the neural classifier in batches of 64. Windows with maximum softmax probability below $\tau_{\text{conf}} = 0.50$ are discarded. Class-wise NMS (IoU 0.30) removes overlapping boxes of the same class; a fragment merge joins the contiguous pieces of one cell that the window cut apart (same class, gap $\le 0.18W$, perpendicular overlap $\ge 0.45$, union span $\le 4W$); cross-class NMS (IoU 0.70) removes the remaining duplicates produced when the model changes its mind between neighbouring windows.
+4. **Optional Contextual Refinement (off by default):** Re-classifying each surviving box with a $+6\%$ margin is available, but disabled: it dropped valid cells whose confidence was already near the threshold and deformed elongated boxes. The earlier precision 0.71 → 0.78 claim is withdrawn.
 
-### 3.7 Test-Time Augmentation (TTA) and Multi-Architecture Ensembling
-1. **Rotational Test-Time Augmentation (TTA):** Diatoms mounted on glass slides exhibit complete rotational invariance. During inference, each crop is evaluated under 4 canonical dihedral orientations ($0^\circ, 90^\circ, 180^\circ, 270^\circ$) and horizontal flips. The predicted logits are averaged prior to softmax activation, yielding consistent $+0.60\%$ to $+1.5\%$ accuracy improvements on noisy field captures.
-2. **Dual-Architecture Ensembling:** To eliminate residual architectural bias, we constructed an ensemble combining our surgically optimized EfficientNet-B3 (`best_edited.pt`, weight $0.65$) with our fine-tuned EfficientNet-B0 (`f1/best.pt`, weight $0.35$):
-   $$\mathbf{z}_{\text{ens}} = 0.65 \cdot \mathbf{z}_{\text{B3}} + 0.35 \cdot \mathbf{z}_{\text{B0}}$$
-   The ensemble achieves exceptional consensus, pushing benchmark accuracy to **$97.33\%$**.
+### 3.7 Withdrawn: Test-Time Augmentation and Multi-Architecture Ensembling
+Previous versions of this manuscript reported $93.80\%$ (TTA) and $97.33\%$ (B3+B0 ensemble) top-1 accuracy.
+**Neither can be reproduced**: the repository contains no ensemble checkpoints (`code/ensemble_eval.py`
+references nine Colab-only checkpoints), no TTA evaluation artifact, and the numbers do not appear in any
+`reports/*.json`. `EnsembleDiatomClassifier` in `code/tdi.py` is explicitly documented as experimental and
+unvalidated. Those figures are therefore withdrawn. The only accuracies reproduced in this work are the two
+checkpoints in Table 1, each re-run from scratch over all 7,375 test cutouts.
 
 ---
 
 ## 4. Empirical Results
 
 ### 4.1 Taxonomic Classification Benchmark
-Table 1 summarizes the classification performance of our fine-tuned and surgically optimized models relative to published benchmarks on the sealed 101-class test set ($N = 7,375$).
+Table 1 summarizes the classification performance of our two checkpoints relative to published benchmarks on the 101-class test set ($N = 7,375$). Rows that could not be reproduced are struck through.
 
 **Table 1.** Classification performance comparison on the *UDE Diatoms in the Wild* benchmark.
 | Model / Framework | Parameters | Top-1 Test Accuracy | Top-5 Accuracy | Limnological Gate | Gate Outcome |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| UDE Baseline [16] | - | 60.41% | - | N/A | Baseline |
+| UDE DS50 OOD detector [16] | - | 60.41% | - | N/A | not a 101-class classifier |
 | Published DL Baseline (ResNet-50) | 25.6 M | 69.00% | 88.50% | N/A | Prior Art |
-| EfficientNet-B0 (Phase 1) | 5.3 M | 76.01% | 95.82% | $\ge 75.0\%$ | **PASS (+15.60 pp)** |
-| EfficientNet-B3 Baseline (`best.pt`) | 12.2 M | 77.90% | 96.98% | $\ge 75.0\%$ | **PASS (+17.49 pp)** |
-| **EfficientNet-B3 Surgical (`best_edited.pt`)** | **12.2 M** | **78.16%** | **96.81%** | $\ge 75.0\%$ | **PASS (+17.75 pp)** |
-| **Surgical + Morphometric Prior + Bayesian Cost** | **12.2 M** | **78.29%** | **96.84%** | $\ge 75.0\%$ | **PASS (+17.88 pp)** |
-| Multi-Scale Test-Time Augmentation (TTA) | 12.2 M | 93.80% | 98.45% | $\ge 75.0\%$ | **PASS (+33.39 pp)** |
-| **Dual-Architecture Ensemble (B3 + B0)** | **17.5 M** | **97.33%** | **99.62%** | $\ge 75.0\%$ | **PASS (+36.92 pp)** |
+| EfficientNet-B0 (Phase 1) | 5.3 M | 76.01% | 95.82% | $\ge 75.0\%$ | **PASS** |
+| EfficientNet-B3 Baseline (`best.pt`) | 10.94 M | 77.90% | 96.98% | $\ge 75.0\%$ | **PASS** |
+| **EfficientNet-B3 Surgical (`best_edited.pt`)** | **10.94 M** | **78.16%** | **96.81%** | $\ge 75.0\%$ | **PASS** |
+| ~~Surgical + Morphometric Prior + Bayesian Cost~~ | — | *withdrawn* | — | — | no artifact |
+| ~~Multi-Scale TTA~~ | — | *withdrawn* | — | — | no artifact |
+| ~~Dual-Architecture Ensemble (B3 + B0)~~ | — | *withdrawn* | — | — | no artifact |
 
-Our surgically optimized model establishes a new state-of-the-art benchmark on the official 101-class sealed test set. The closed-form surgery correctly flips 29 previously misclassified test cells without retraining, while the dual-model ensemble reaches $97.33\%$ Top-1 accuracy.
+Rows in strikethrough are retracted: no checkpoint, no evaluation log, and no code path in the repository
+produces them (see the corrections box and §3.7). The two surviving rows were re-inferred from scratch over
+all 7,375 test cutouts. The surgical edit flips 19 cells, not 29: the two checkpoints are the same training
+run (`epoch=28`, `best_acc=78.0067`, `split_hash=b6a0cb94…`) and differ only in `classifier.weight/bias`.
 
-### 4.2 Empirical Verification of Error Damping Across 294 Natural River Assemblages
-To evaluate the central hypothesis of statistical error damping, we reconstructed the 294 natural river assemblages from the $7,375$ sealed test cutouts. For every site, we computed:
+**Table 1b. Does the test split leak?** (`reports/auditoria_fuga.json`)
+
+| Subset of the test set | Cutouts | `best.pt` | `best_edited.pt` |
+| :--- | :---: | :---: | :---: |
+| Source micrograph also in train | 3,364 (45.61%) | 80.65% | 80.98% |
+| Source micrograph unseen in train | 4,011 (54.39%) | 75.59% | 75.79% |
+| Inflation from the leak | — | **+5.06 pp** | **+5.18 pp** |
+
+`state/split_grouped.json` removes the leak (0 of 32 test slides shared with train, 7,482 test cutouts) but
+cannot be used to evaluate these checkpoints, which already saw those slides. Retraining is required.
+
+### 4.2 Empirical Verification of Error Damping Across 294 Slide Groups
+To evaluate the central hypothesis of statistical error damping, we grouped the 7,375 test cutouts by slide/treatment token. The 294 groups are preparation units of the benchmark (`NH4Cl`, `DW`, `Naphrax` mounts), not 294 independent river reaches; they remain the finest grouping the public filenames support. For every group we computed:
 1. $\text{TDI}_{\text{true}}$: The ecological index calculated from human-verified taxonomic annotations.
 2. $\text{TDI}_{\text{pred}}$: The ecological index calculated from the model predictions.
 
-The comprehensive statistical validation comparing the baseline and surgical models across all 294 natural river sites is detailed in Table 2.
+The comprehensive statistical validation comparing the baseline and surgically edited models across all 294 groups is detailed in Table 2.
 
-**Table 2.** Statistical validation of TDI error propagation across 294 natural river sampling sites ($7,375$ field cutouts).
+**Table 2.** TDI error propagation across 294 slide/treatment groups ($7,375$ field cutouts), published index formula.
 | Metric | Baseline Model (`best.pt`) | Surgical Model (`best_edited.pt`) | Limnological Significance |
 | :--- | :---: | :---: | :--- |
-| **Test Cutouts Evaluated** | 7,375 | 7,375 | Cryptographically sealed split (`b6a0cb94...`) |
-| **Natural River Sites** | 294 | 294 | Reconstructed river assemblages across Germany |
-| **Top-1 Classification Accuracy** | 77.90% | **78.29%** | $+0.39\%$ improvement (+29 correct frustules) |
-| **Whole-Dataset Ground Truth TDI** | **3.435** | **3.435** | Verified benchmark limnological status |
-| **Whole-Dataset Predicted TDI** | **3.433** | **3.431** | Model predicted assemblage status |
-| **Whole-Dataset TDI Error ($\Delta \text{TDI}$)** | $\mathbf{-0.002}$ | $\mathbf{-0.004}$ | **Near-zero aggregate bias** |
-| **Pearson Correlation ($r$)** | $\mathbf{0.9703}$ | $\mathbf{0.9705}$ | Near-perfect linear alignment ($p < 10^{-15}$) |
-| **Spearman Rank Correlation ($\rho$)** | $\mathbf{0.9658}$ | $\mathbf{0.9661}$ | Near-perfect monotonic preservation ($p < 10^{-15}$) |
-| **Coefficient of Determination ($R^2$)** | $\mathbf{0.9410}$ | $\mathbf{0.9415}$ | $94.1\%$ of ecological variance explained |
-| **Mean Absolute Error (MAE)** | **0.1037** | **0.1020** | **Historic project minimum** ($5\times$ smaller than band width) |
-| **Directional Bias Balance** | **90 $\uparrow$ / 103 $\downarrow$** | **89 $\uparrow$ / 102 $\downarrow$** | **Zero systematic directional drift** |
-| **Exact 5-Tier Quality Concordance** | **90.14%** (265/294) | **90.14%** (265/294) | WFD regulatory class preserved in 9 out of 10 sites |
-| **Adjacent Quality Concordance ($\le 1$ band)** | **99.32%** (292/294) | **99.32%** (292/294) | Only 2 sites out of 294 shift by $> 1$ class |
-| **Mineral Detritus False Alarm Rate** | Moderate | **0.00%** | Completely suppressed via null-space projection |
+| **Test Cutouts Evaluated** | 7,375 | 7,375 | Random split (`b6a0cb94…`), 45.61% of them leak |
+| **Groups (slides/treatments)** | 294 | 294 | `NH4Cl` / `DW` / mount preparations of the benchmark |
+| **Top-1 Classification Accuracy** | 77.90% | **78.16%** | $+0.26$ pp (+19 cells), same training run |
+| **Whole-Set Ground-Truth TDI (raw)** | **3.1746** | **3.1746** | Human labels, benthic taxa only |
+| **Whole-Set Predicted TDI (raw)** | **3.1525** | **3.1533** | Model prediction, same taxa |
+| **Whole-Set TDI (0–100)** | 54.4 vs 53.8 | 54.4 vs 53.8 | $25\times$raw$-25$ |
+| **Pearson Correlation ($r$)** | $\mathbf{0.9681}$ | $\mathbf{0.9665}$ | Group level, $n = 294$ |
+| **Spearman Rank ($\rho$)** | $\mathbf{0.9692}$ | $\mathbf{0.9667}$ | Group level |
+| **Coefficient of Determination ($R^2$)** | $\mathbf{0.9372}$ | $\mathbf{0.9341}$ | $r^2$ |
+| **Mean Absolute Error (MAE, raw)** | **0.1249** | **0.1255** | $\approx 3.1$ points on the 0–100 scale |
+| **RMSE (raw)** | 0.2286 | 0.2334 | Group level |
+| **Directional Bias Balance** | **93 $\uparrow$ / 107 $\downarrow$ / 94 =** | **99 $\uparrow$ / 107 $\downarrow$ / 88 =** | No systematic drift |
+| **Exact 5-Tier Quality Concordance** | **83.33%** (245/294) | **83.33%** (245/294) | WFD band preserved in 5 of 6 groups |
+| **Adjacent Quality Concordance ($\le 1$ band)** | **98.98%** (291/294) | **98.64%** (290/294) | 4 groups shift by $> 1$ band |
+| **Valued biomass (`value_mass`)** | 78.3% | 78.3% | Share of counts carrying published $s$ and $v$ |
+| **Planktonic share** | 11.0% | 11.0% | Excluded from numerator and denominator |
+| **Mineral Detritus False Alarm Rate** | — | — | Not measured; the 0.00% claim is withdrawn |
+
+The index only covers the 78.3% of counted cells whose taxon has both a published sensitivity and a
+published indicator weight; the app reports this mass fraction on every run. Note also the reachable range:
+no benthic taxon in this 101-class set has $s = 1$, so the floor of the index is 25, not 0.
 
 ### 4.3 Representative Site-Level Quality Class Agreement
-Table 3 illustrates representative site-level outputs across the full ecological spectrum, showing exact quality class preservation from oligotrophic to hypereutrophic sites.
+Table 3 lists real groups from `reports/validacion_tdi.json`, sampled across the observed range plus the worst
+group, with the corrected index. 117 of the 294 groups have a true index below 3.0; the benchmark spans the full
+scale, with a median group size of 23 cells.
 
-**Table 3.** Representative sample of river sites evaluated across diverse water quality classes.
-| River Site ID | Total Cells | Dominant Taxon | True TDI | Pred TDI | Error ($\Delta \text{TDI}$) | True Class | Pred Class | Match |
-| :--- | :---: | :--- | :---: | :---: | :---: | :--- | :--- | :---: |
-| `site_042` | 48 | *Achnanthidium minutissimum* | 1.85 | 1.88 | +0.03 | High (Oligotrophic) | High (Oligotrophic) | **EXACT** |
-| `site_119` | 35 | *Cocconeis placentula* | 2.45 | 2.40 | -0.05 | Good (Oligo-meso) | Good (Oligo-meso) | **EXACT** |
-| `site_087` | 62 | *Navicula gregaria* | 3.20 | 3.18 | -0.02 | Moderate (Mesotrophic) | Moderate (Mesotrophic) | **EXACT** |
-| `site_204` | 51 | *Nitzschia palea* | 4.35 | 4.41 | +0.06 | Poor (Eutrophic) | Poor (Eutrophic) | **EXACT** |
-| `site_281` | 39 | *Nitzschia palea* | 4.80 | 4.75 | -0.05 | Bad (Hypereutrophic) | Bad (Hypereutrophic) | **EXACT** |
+**Table 3.** Real groups, sorted by the human index (the last row is the worst prediction, not the highest index).
+| Slide / treatment group | Cells | True TDI | Pred TDI | $\Delta$ | True band | Pred band | Match |
+| :--- | :---: | :---: | :---: | :---: | :--- | :--- | :---: |
+| `22_IMP-C01_Naphrax_NH4Cl` | 13 | 2.000 | 2.000 | +0.000 | Excellent | Excellent | **EXACT** |
+| `Emscher21_KIR-un_2_Naphrax_NH4Cl` | 44 | 2.114 | 2.114 | +0.000 | Excellent | Excellent | **EXACT** |
+| `Tisa_000436a_Naphrax_60x` | 25 | 3.182 | 3.167 | −0.015 | Fair | Fair | **EXACT** |
+| `Kinzig21_BRA2_Naphrax_NH4Cl` | 34 | 4.091 | 4.022 | −0.069 | Poor | Poor | **EXACT** |
+| `Tisa_000371a_Naphrax_60EFI` | 17 | 5.000 | 3.500 | **−1.500** | Bad | Fair | SHIFT |
 
-### 4.4 Ablation Ladder of Post-Processing and Structural Interventions
-To disentangle the contribution of each algorithmic innovation, we evaluated an ablation ladder across the sealed test set (Table 4).
+The last row is the honest failure mode: a 17-cell slide where a third of the counts differ in sensitivity moves
+the index by 1.5 raw units (37.5 points on the 0–100 scale) and two quality bands. Small groups are volatile, and
+the aggregate accuracy figures hide them.
 
-**Table 4.** Ablation ladder of post-processing and structural interventions.
-| Configuration | Top-1 Acc | Top-5 Acc | Site MAE | Limnological Contribution |
-| :--- | :---: | :---: | :---: | :--- |
-| Baseline EfficientNet-B3 | 77.90% | 96.98% | 0.1037 | Baseline transfer learning model |
-| + Detritus SVD Null-Space Projection | 78.02% | 96.92% | 0.1042 | Eliminates false alarms on mineral fragments |
-| + Prototype Margin Expansion | 78.16% | 96.81% | 0.1067 | Resolves entangled sister congener boundaries |
-| + Morphometric Aspect-Ratio Prior | 78.22% | 96.84% | 0.1031 | Gating against impossible frustule morphologies |
-| **+ Bayesian Cost-Sensitive Risk Minimization** | **78.29%** | **96.84%** | **0.1020** | **Lowest ecological site error on record** |
-| + Test-Time Augmentation (TTA) | 93.80% | 98.45% | 0.0890 | 4-fold dihedral rotational ensemble |
-| + Dual-Architecture Ensemble (B3 + B0) | 97.33% | 99.62% | 0.0650 | High-capacity consensus classification |
+### 4.4 Withdrawn: Ablation Ladder
+The previously published ablation ladder (78.02% → 78.16% → 78.22% → 78.29%, MAE 0.1037 → 0.1020, TTA 93.80%,
+ensemble 97.33%) is **withdrawn in full**. It was produced by a 168-configuration grid search (`vws_grid_search.py`)
+scored on the test set, and several of its rungs correspond to code paths that are not in the shipped engine
+(the cost-sensitive Bayesian rule of Equation 14 has no implementation in `code/tdi.py`; the morphometric prior
+degenerates to a constant per class under square sliding windows, which is why it is now disabled by default).
+
+What can be measured today is the pair of real checkpoints and nothing else:
+
+| Configuration | Top-1 | Site MAE (raw) | Artifact |
+| :--- | :---: | :---: | :--- |
+| Baseline EfficientNet-B3 (`best.pt`) | 77.90% | 0.1249 | re-run, `sha 8d4fd7c6…` |
+| Edited head (`best_edited.pt`) | 78.16% | 0.1255 | re-run, `sha 0557c765…` |
+
+The delta between them is +0.26 pp; the higher MAE of the edited model means the extra cells it fixes do not
+translate into a better site-level index on this split. Any future claim about detritus projection or the
+aspect-ratio prior needs its own checkpoint, its own report and a held-out split.
 
 ### 4.5 Analytical Weight-Space Surgery vs. Gradient-Based Fine-Tuning
 To evaluate whether gradient-based fine-tuning could surpass analytical weight surgery, we conducted a controlled trial freezing the lower $92.7\%$ of parameters and optimizing the classification head (`conv_head`, `bn2`, and `classifier`, $786,629$ parameters) over 2 epochs on 2,628 curated boundary samples using AdamW on Apple Silicon M4 GPU acceleration. 
 
-The gradient-tuned model achieved $77.25\%$ Top-1 on epoch 1 and $77.07\%$ on epoch 2, failing to match the baseline ($77.90\%$) or the surgical model ($78.29\%$). Backpropagation updates induced destructive interference with frozen spatial feature representations. Consequently, the analytical closed-form surgery demonstrated superior mathematical stability and generalization.
+The gradient-tuned model achieved $77.25\%$ Top-1 on epoch 1 and $77.07\%$ on epoch 2, failing to match the baseline ($77.90\%$) or the edited head ($78.16\%$). (Trial log not reproduced in this audit; treat as reported, not verified.) Backpropagation updates induced destructive interference with frozen spatial feature representations. Consequently, the analytical closed-form surgery demonstrated superior mathematical stability and generalization.
 
-### 4.6 Positional Counting and Detection Accuracy
-To validate the spatial detection and cell counting layer independently of classification, we constructed a spatial ground-truth benchmark consisting of full micrographs seeded with 20 known diatom frustules at calibrated coordinates and orientations:
-- **Detection Precision:** $\mathbf{0.78}$ (78% of detected bounding boxes correspond to true diatom frustules).
-- **Detection Recall:** $\mathbf{0.70}$ (70% of all present frustules successfully extracted).
-- **Correct Taxon on True Positives:** $\mathbf{0.86}$ (86% of properly segmented cells correctly classified).
+### 4.6 End-to-End Counting Accuracy
+Classification and index propagation are measured on pre-segmented cutouts; the full image-to-count path was audited separately. On 60 real UDE cutouts pasted into blank fields, the engine returns exactly one detection in 49 cases, none in 5 and more than one in 6 (mean 1.05); the correct taxon is present in 48 of 60. Three synthetic slides of 30 cells yield 29, 33 and 32 detections. The demo image (`app/sample.png`) returns 9 detections for one elongated cell, and two low-contrast smartphone eyepiece photographs return none.
 
-The contextual $+6\%$ margin refinement step played a decisive role, suppressing non-diatom mineral false alarms and elevating precision from 0.71 to 0.78.
+Two failure modes dominate. A cell whose apparent size exceeds the 150 px window is seen in several windows, and the fragment merge does not always rejoin the pieces; low-contrast mobile captures fall below the 0.50 confidence threshold entirely. The earlier precision 0.78 / recall 0.70 figures came from a seeded benchmark that is not in the repository and are withdrawn. Counting is the weakest link of the pipeline; the index results above do not depend on it because they consume human-segmented cutouts.
 
 ### 4.7 Hardware Efficiency and Inference Speed
 We measured wall-clock execution times natively on commodity edge hardware with unified memory and GPU acceleration (tested with PyTorch Metal Performance Shaders on Apple Silicon M4, 16 GB RAM, and compared to multi-core CPU execution), as detailed in Table 5.
 
-**Table 5.** Inference runtime benchmarks under edge hardware acceleration.
-| Pipeline Stage | Processing Scope | Latency (Apple Silicon M4 GPU) | Latency (8-Core CPU) |
+**Table 5.** Inference runtime, measured on Apple Silicon M4 (PyTorch MPS, batch 64).
+| Pipeline stage | Scope | Windows | Latency |
 | :--- | :--- | :---: | :---: |
-| Single Cutout Inference | $300 \times 300$ crop | 15.2 ms | 34.1 ms |
-| Batch Cutout Inference | Batch of 64 crops | 142.0 ms | 680.0 ms |
-| Full Micrograph Analysis | $1920 \times 1080$ slide (dense scan) | 7.1 s | 22.4 s |
-| Smartphone Camera Photo | $4000 \times 3000$ ocular photo (lattice scan) | 11.2 s | 38.6 s |
+| Single cutout | $300 \times 300$ crop | 1 | 15.2 ms |
+| Batch cutouts | 64 crops | — | 142.0 ms |
+| App demo image | `app/sample.png`, $902 \times 948$ | 121 (dense) | **2.5 s** |
+| Field frame | $5000 \times 3000$ | 1,118 (full frame, 114 px step) | **15.5 s** |
 
-A complete 12-megapixel photograph captured with a smartphone mounted on a standard light microscope eyepiece is fully processed—including sliding-window extraction, batch classification, dual-stage NMS, contextual refinement, taxon counting, and TDI computation—in **11.2 seconds**. The memory footprint remained strictly below **450 MB RAM**, operating easily without swapping.
+A complete 12 MP frame is processed — sliding-window extraction, batch classification, class-wise NMS, fragment
+merge, cross-class NMS, counting and index computation — in **15.5 s**, not the 11.2 s claimed before. The earlier number came
+from a budget that stopped at 800 windows, i.e. it inspected the top 42.5% of the frame. The single-cutout and
+64-crop timings are carried over from the original benchmarks and were not re-measured in this audit; the two
+field-frame rows are from `python3 code/tdi.py --image …` on 2026-11-14.
 
 ---
 
@@ -279,17 +374,17 @@ A complete 12-megapixel photograph captured with a smartphone mounted on a stand
 ### 5.1 The Biological Meaning of Error Damping in Biomonitoring
 The primary objection historically raised by statutory agencies against deploying machine learning in ecological biomonitoring has been the fear of error propagation: if an algorithm misidentifies one out of every five cells ($\sim 20\%$ error), how can its ecological verdict be trusted?
 
-Our empirical findings across 294 natural river assemblages provide a conclusive mathematical answer: **classifier errors in fine-grained biological taxonomy do not compound additively; they damp out.** 
+Our empirical findings across the 294 groups point to a clear answer: **classifier errors in fine-grained biological taxonomy do not compound additively; they largely damp out** — though less cleanly than the earlier version of this manuscript claimed. 
 In natural algal communities, neural network confusion occurs predominantly between closely related congeners within the same genus (e.g., *Navicula gregaria* vs. *Navicula cryptocephala*, or *Nitzschia palea* vs. *Nitzschia dissipata*). Because evolutionary relatives frequently share physiological adaptations to nutrient concentrations, their sensitivity values $s_i$ and $s_j$ are identical or differ by only 1 unit. As formalized in Equation (8), intra-guild confusion contributes zero net shift to the index. 
 
-Furthermore, because errors across differing guilds are statistically balanced ($89$ sites shifted slightly positive, $102$ sites shifted slightly negative), individual deviations cancel out across the sample. With a mean absolute site error of **0.1020**, the algorithmic error is 5 to 10 times narrower than the boundaries of WFD water quality classes ($0.50$ to $1.00$ units wide). As a direct result, **$90.14\%$ of all river sites receive the exact same ecological status designation as human expert counts**, and **$99.32\%$ are within $\le 1$ adjacent band**.
+Furthermore, because errors across differing guilds are statistically balanced ($99$ groups shifted slightly positive, $107$ slightly negative, $88$ unchanged), individual deviations cancel out across the sample. With a mean absolute group error of **0.1255** on the 1–5 scale — about 3.1 points on the 0–100 index, roughly a fifth of a 15-point band — **$83.33\%$ of groups receive the exact same quality band as the human counts** and **$98.64\%$ stay within one band**. The effect is real but modest, and it is measured on a split that leaks; the 90.14% / 99.32% figures of the previous version are withdrawn.
 
-This insight fundamentally reframes the role of computer vision in ecological science: a classifier does not need to achieve $100\%$ taxonomic perfection to deliver $99\%$ regulatory reliability.
+This insight still reframes the role of computer vision in ecological science — taxonomic perfection is not required for a usable regulatory signal — but the size of the effect must be stated honestly, and the generalisation gap must be closed by retraining on grouped slides before the claim is made in the field.
 
-### 5.2 Elimination of Microscopic Artifacts via Weight-Space Surgery
-A chronic failure mode in automated phycology is the misclassification of amorphous detritus (decomposed plant tissue, silica fragments, sand particles, air bubbles) as rare or tolerant diatom taxa. Classical computer vision approaches combat this via heavier heuristic filtering or training dedicated background classes, which requires thousands of negative manual annotations.
+### 5.2 Weight-Space Surgery Without Gradient Descent
+A chronic failure mode in automated phycology is the misclassification of amorphous detritus (decomposed plant tissue, silica fragments, sand particles, air bubbles) as rare or tolerant diatom taxa. Classical computer vision approaches combat this with heavier heuristic filtering or a dedicated background class, which requires thousands of negative annotations.
 
-Our closed-form null-space projection provides an elegant, zero-training solution: by computing the SVD signature of detritus in the 1536-dimensional latent space and subtracting its projection from all 101 classifier prototypes, the network becomes mathematically orthogonal—and hence unresponsive—to slide contamination. Combined with the biological aspect-ratio prior, this layer entirely eliminates false alarms on mineral fragments.
+The shipped checkpoint (`best_edited.pt`) is the product of a closed-form edit of the classifier head: the two checkpoints share the same training run and differ only in `classifier.weight` and `classifier.bias`, and the edit raises top-1 from 77.90% to 78.16% without any gradient step. The stronger claims attached to earlier versions of this section — a 1536-dimensional null-space projection of detritus and a morphometric prior that eliminates mineral false alarms — are withdrawn: the prior degenerates to a constant per class under square windows, the detritus projection has no artifact in the repository, and the mineral false-alarm rate was never measured. The surgical edit is real; the immunity to detritus is not established.
 
 ### 5.3 Comparison with Existing Ecological Software
 Traditional diatom analysis software—such as OMNIDIA [17], DARLEQ3 [8], and DiaThor [18]—are fundamentally **downstream calculators**. They require a human taxonomist to manually identify and tabulate every frustule before any analysis can take place. 
@@ -302,7 +397,7 @@ A critical impediment to operational biological monitoring in freshwater ecosyst
 
 To eliminate this bottleneck, we architected the pipeline as a **zero-dependency, edge-deployable software suite** capable of executing completely offline on commodity field hardware. The software couples a lightweight multi-threaded local engine (`server.py`) with a minimalist, responsive interface (`index.html`):
 1. **Smartphone-Microscope Eyepiece Coupling:** Field biologists equipped with a portable battery-powered field microscope and an ocular adapter can capture high-resolution ($12 \text{ MP}$) photographs directly through the ocular lens using standard smartphones. The interface supports direct optical acquisition via HTML5 camera integration (`capture="environment"`), enabling immediate field image feeding.
-2. **Local Edge Inference and Confidentiality:** Operating in remote river reaches, alpine catchments, and protected riparian corridors requires functioning in the complete absence of cellular coverage or internet connectivity. The inference engine executes locally on edge hardware (utilizing GPU/MPS acceleration or standard multi-core CPUs) without transmitting imagery or telemetry to external servers, guaranteeing total data sovereignty and privacy. Whole-field evaluation of a 12 MP smartphone photo completes in under 11 seconds, outputting the calculated TDI, confidence bounds, and WFD water quality status on-site.
+2. **Local Edge Inference and Confidentiality:** Operating in remote river reaches, alpine catchments, and protected riparian corridors requires functioning in the complete absence of cellular coverage or internet connectivity. The inference engine executes locally on edge hardware (utilizing GPU/MPS acceleration or standard multi-core CPUs) without transmitting imagery or telemetry to external servers, guaranteeing total data sovereignty and privacy. Whole-field evaluation of a 12 MP smartphone photo completes in 15.5 seconds, outputting the calculated TDI, confidence bounds, and WFD water quality status on-site.
 3. **Automated Process Lifecycle Management:** To prevent headless server processes from draining mobile battery capacity when the user closes the window, the engine integrates an autonomous heartbeat watchdog coupled with browser lifecycle hooks (`beforeunload` and `sendBeacon`). Closing the interface triggers an immediate, clean termination of the backend server.
 4. **Universal Native Execution:** The system provides cross-platform execution across operating systems via native launchers—including a standalone macOS application bundle (`Diatomeas.app`), a Unix shell script (`Diatomeas.sh`), and a Windows batch script (`Diatomeas.bat`)—complemented by a procedurally generated vector icon rendered from mathematical diatom frustule geometry without generative image models.
 
@@ -312,9 +407,9 @@ To eliminate this bottleneck, we architected the pipeline as a **zero-dependency
 
 In accordance with strict scientific falsation protocols, we explicitly document the methodological limitations and operational boundaries of the current system:
 
-1. **Sliding-Window Heuristic vs. Native Instance Segmentors:** The current detection framework utilizes a sliding-window heuristic with NMS and contextual refinement (precision 0.78, recall 0.70). While fast and effective, sliding-window sweeps are sensitive to cell density and overlap. Training an end-to-end instance segmentation network (such as YOLOv8-seg or Mask R-CNN) directly on whole-slide micrographs represents the logical next phase.
+1. **Sliding-Window Heuristic vs. Native Instance Segmentors:** The current detection framework is a sliding-window sweep with class-wise NMS, fragment merging and cross-class NMS. It returns exactly one detection on 49 of 60 single-cell fields, but splits cells larger than the window and misses low-contrast mobile photos (Section 4.6). Training an end-to-end instance segmentation network (such as YOLOv8-seg or Mask R-CNN) directly on whole-slide micrographs is the logical next phase.
 2. **Optical Magnification and Pixel-Scale Dependency:** The default sliding window ($W = 150 \text{ px}$) was empirically calibrated to the optical magnification of the UDE slide scans ($100\times$ oil immersion light microscopy, where the median cell major axis is 148 px). If an operator captures images under a $40\times$ objective without oil immersion, the apparent cell diameter decreases to $\sim 60\text{ px}$. Scanning with $W = 150 \text{ px}$ under such conditions causes the receptive field to encompass multiple cells and empty background, degrading classifier confidence. Operators must adjust the `--window` or `--scale` parameters to match their microscope optical calibration.
-3. **Regional Endemics and Out-of-Distribution (OOD) Taxa:** The model covers the 101 core taxa predominant in Central European temperate rivers, representing $> 84\%$ of total diatom biomass in typical samples (`value_mass` = $84.45\%$). Applying the model to tropical, Arctic, or hypersaline river catchments containing regional endemics will encounter out-of-distribution specimens. The pipeline handles this honestly by reporting `value_mass` and rejecting low-confidence crops, but regional fine-tuning will be necessary for non-European geographies.
+3. **Regional Endemics and Out-of-Distribution (OOD) Taxa:** The model covers the 101 core taxa predominant in Central European temperate rivers, on the benchmark test set the index covers 78.3% of counted cells (`value_mass`). Applying the model to tropical, Arctic, or hypersaline river catchments containing regional endemics will encounter out-of-distribution specimens. The pipeline handles this honestly by reporting `value_mass` and rejecting low-confidence crops, but regional fine-tuning will be necessary for non-European geographies.
 4. **Single-Field vs. Multi-Slide Absolute Cell Density:** The current implementation processes single micrographs or mobile captures, computing relative abundances $A_i$ and the TDI. It does not yet integrate multi-image stitching across a full slide cover slip to determine absolute volumetric cell concentrations (cells/$\text{cm}^2$).
 
 ---
@@ -363,23 +458,27 @@ Compute TDI_human                       Compute TDI_model + value_mass
 
 ## 8. Reproducibility, Code, and Data Availability
 
-- **Source Code and Engine:** The complete repository for inference, sliding-window cell detection, TDI calculation, test suites (37 passing unit checks), weight surgery engine, and site-level validation is openly provided:
+- **Source Code and Engine:** The complete repository for inference, sliding-window cell detection, TDI calculation, test suites (70 passing unit checks), weight surgery engine, and site-level validation is openly provided:
   - `code/tdi.py`: Core inference, sliding-window counter, TDI engine, and CLI supporting single-model and ensemble inference.
   - `code/build_tdi_table.py`: Automated curation and reconciliation of Kelly & Whitton (1995) and DARLEQ2 indicator databases.
   - `data/morphometric_prior_101.json`: Curated biological aspect-ratio distributions $(\mu, \sigma)$ for all 101 taxa.
-  - `diatom-weight-surgery/engine/`: Weight-Space Surgery toolkit (`vws_kernel.py`, `vws_autotune.py`, `vws_ops.py`, `vws_extract_noise.py`, `vws_grid_search.py`).
-  - `code/validate_tdi.py`: Validation script reproducing site-level error propagation across the 294 river reaches.
+  - `code/weight_surgery/`: Weight-Space Surgery toolkit (`vws_kernel.py`, `vws_autotune.py`, `vws_ops.py`, `vws_extract_noise.py`, `vws_grid_search.py`).
+  - `code/validate_tdi.py`: Validation script reproducing group-level error propagation across the 294 slide groups.
+  - `code/audit_leakage.py`: Quantifies the split leak (accuracy on test cutouts whose micrograph is vs. is not in train).
+  - `code/build_split_grouped.py`: Builds `state/split_grouped.json`, the slide-grouped split for honest retraining.
+  - `code/check_artifacts.py`: Consistency gate — the `.pyz`, the native bundle and the reports must contain the code and checkpoint they claim.
+  - `code/build_pyz.py`: Reproducible single-file engine, with a `BUILD.json` manifest of asset SHA-256 values.
 - **Software Suite and Cross-Platform GUI:** The autonomous desktop and field application layer is provided in the repository:
   - `app/server.py`: Multi-threaded local engine with automatic heartbeat watchdog, LAN hotspot support, and cross-platform browser integration.
   - `app/index.html`: Zero-dependency, responsive dark-mode GUI featuring interactive bounding-box overlays, taxon distribution tables, and JSON telemetry export.
-  - `zar_manah_diatom_tdi.pyz` (`zar_manah_diatom_tdi.command`): 100% autonomous, zero-dependency single-file standalone engine running on any device (macOS, Windows, Linux, Android/Termux) embedding the neural weights, web UI, TDI tables, and local engine without external dependencies.
+  - `zar_manah_diatom_tdi.pyz` (`Diatomeas.command`): 100% autonomous, zero-dependency single-file standalone engine running on any device (macOS, Windows, Linux, Android/Termux) embedding the neural weights, web UI, TDI tables, and local engine without external dependencies.
   - `Diatomeas.app`, `Diatomeas.sh`, `Diatomeas.bat`: Native launchers for macOS, Linux, and Windows.
-  - `generate_icon.py`: Vector script procedurally drawing the naviculoid diatom frustule icon and generating `.svg`, `.png`, and `.icns` assets without generative AI.
+  - `app/icon.svg`, `app/icon.png`, `diatomeas-icon.png`: vector and raster icon assets used by the GUI, the native bundle, and this README.
 - **Model Checkpoints:**
   - Original baseline model: `checkpoints/f2/best.pt` (SHA-256: `8d4fd7c61b6a1e11f329847db902830bee8623862f53d7a521ebe6943f7676c1`).
   - Surgically optimized model (champion): `checkpoints/f2_edited/best_edited.pt` (SHA-256: `0557c7655159532f597ceb14c530f8c767a8b717bd80026a8f042b7d87eedd94`).
   - Mineral detritus SVD noise signature vector: `checkpoints/f2_edited/detritus_vector.pt`.
-- **Benchmark Data:** The *UDE Diatoms in the Wild 2024* dataset is openly available via GigaDB and Zenodo (DOI: [10.5281/zenodo.10654872](https://doi.org/10.5281/zenodo.10654872)). The sealed benchmark split utilized in this study is deterministically locked via SHA-256 hash `b6a0cb94aab2dd544e88de5d9c0f1c81a78aa59217c3081baf125943874f898d`.
+- **Benchmark Data:** The *UDE Diatoms in the Wild 2024* dataset is openly available via GigaDB and Zenodo (DOI: [10.5281/zenodo.10410655](https://doi.org/10.5281/zenodo.10410655)). The split used for the reported numbers is `state/split_f1.json`, hash `b6a0cb94aab2dd544e88de5d9c0f1c81a78aa59217c3081baf125943874f898d`. It is **not** sealed with respect to micrograph identity: 45.61% of its test cutouts are crops of a photograph also present in train. The group-clean alternative is `state/split_grouped.json` (hash `31d7ad2280c818b4`; 0 shared slides, 7,482 test cutouts), released for retraining.
 
 ---
 

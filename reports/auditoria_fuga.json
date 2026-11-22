@@ -1,0 +1,37 @@
+{
+  "method": "test cutouts are split by whether their source micrograph (.Chunk) also appears in train; the accuracy gap is the inflation caused by build_split.py shuffling cutout filenames instead of grouping by slide",
+  "split": "state/split_f1.json (random split, the one the shipped checkpoints used)",
+  "checkpoints": [
+    {
+      "checkpoint": "checkpoints/f2_edited/best_edited.pt",
+      "checkpoint_sha256": "0557c7655159532f597ceb14c530f8c767a8b717bd80026a8f042b7d87eedd94",
+      "test_cells": 7375,
+      "cells_from_a_train_micrograph": 3364,
+      "pct_cells_from_a_train_micrograph": 45.61,
+      "accuracy_all": 78.16,
+      "accuracy_micrograph_seen": 80.98,
+      "accuracy_micrograph_unseen": 75.79,
+      "leak_gap_pp": 5.18
+    },
+    {
+      "checkpoint": "checkpoints/f2/best.pt",
+      "checkpoint_sha256": "8d4fd7c61b6a1e11f329847db902830bee8623862f53d7a521ebe6943f7676c1",
+      "test_cells": 7375,
+      "cells_from_a_train_micrograph": 3364,
+      "pct_cells_from_a_train_micrograph": 45.61,
+      "accuracy_all": 77.9,
+      "accuracy_micrograph_seen": 80.65,
+      "accuracy_micrograph_unseen": 75.59,
+      "leak_gap_pp": 5.06
+    }
+  ],
+  "checkpoint": "checkpoints/f2_edited/best_edited.pt",
+  "test_cells": 7375,
+  "cells_from_a_train_micrograph": 3364,
+  "pct_cells_from_a_train_micrograph": 45.61,
+  "accuracy_all": 78.16,
+  "accuracy_micrograph_seen": 80.98,
+  "accuracy_micrograph_unseen": 75.79,
+  "leak_gap_pp": 5.18,
+  "checkpoint_sha256": "0557c7655159532f597ceb14c530f8c767a8b717bd80026a8f042b7d87eedd94"
+}

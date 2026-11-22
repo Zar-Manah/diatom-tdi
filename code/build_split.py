@@ -14,9 +14,10 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent
 CSV_DEFAULT = (
-    "data 🧬/data/"
-    "UDE Diatoms in the Wild 2024/UDE Diatoms in the Wild 2024.csv"
+    ROOT / "data" / "UDE Diatoms in the Wild 2024"
+    / "UDE Diatoms in the Wild 2024.csv"
 )
 
 
@@ -33,7 +34,7 @@ def label_of(row: dict) -> str | None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--csv", default=CSV_DEFAULT)
-    ap.add_argument("--out", default="data 🧬/state/split_f1.json")
+    ap.add_argument("--out", default=str(ROOT / "state" / "split_f1.json"))
     ap.add_argument("--min-per-class", type=int, default=100)
     ap.add_argument("--max-classes", type=int, default=101)
     ap.add_argument("--val-frac", type=float, default=0.10)
