@@ -2,7 +2,7 @@
 
 **Deep learning estimation of the Trophic Diatom Index from light microscopy images**
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24443740.svg)](https://doi.org/10.5281/zenodo.24443740)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24443739.svg)](https://doi.org/10.5281/zenodo.24443739)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 
@@ -163,7 +163,7 @@ Python 3.10+ is required. PyTorch runs on Apple Silicon MPS, NVIDIA CUDA or CPU.
 ## Model weights
 
 The weights are archived on Zenodo together with the source release:
-[doi:10.5281/zenodo.24443740](https://doi.org/10.5281/zenodo.24443740).
+[doi:10.5281/zenodo.24443739](https://doi.org/10.5281/zenodo.24443739).
 
 Download `diatom-tdi-checkpoints.zip`, verify it against `SHA256SUMS.txt`, and
 extract it at the repository root. The archive restores:
@@ -242,8 +242,8 @@ are cached per checkpoint SHA-256, and validation aborts if the checkpoint's
                from light microscopy images},
   author    = {Manah, Zar},
   year      = {2026},
-  version   = {1.0.0},
-  doi       = {10.5281/zenodo.24443740},
+  version   = {1.0.1},
+  doi       = {10.5281/zenodo.24443739},
   url       = {https://github.com/Zar-Manah/diatom-tdi},
   license   = {MIT}
 }

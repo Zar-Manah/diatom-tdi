@@ -16,9 +16,9 @@ authors:
     given-names: Zar
     orcid: "https://orcid.org/0009-0007-8443-8999"
     affiliation: "Independent Researcher, Madrid, Spain"
-version: 1.0.0
+version: 1.0.1
 date-released: 2026-11-22
-doi: 10.5281/zenodo.24443740
+doi: 10.5281/zenodo.24443739
 url: "https://github.com/Zar-Manah/diatom-tdi"
 repository-code: "https://github.com/Zar-Manah/diatom-tdi"
 license: MIT
